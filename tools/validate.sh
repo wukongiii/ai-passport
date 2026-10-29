@@ -51,6 +51,19 @@ run_static_checks() {
         tests/test_text_input.c main/input/text_input.c main/ui/app_actions.c -o "${test_dir}/test_text_input"
     "${test_dir}/test_text_input"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_speech_model.c main/speech/speech_model.c -o "${test_dir}/test_speech_model"
+    "${test_dir}/test_speech_model"
+    "${CC:-cc}" -std=gnu11 -Wall -Wextra -Werror -Imain \
+        -Itests/speech_stubs -Itests/bsp_stubs -Icomponents/bsp/include -Icomponents/esp_tts/include \
+        tests/test_speech_runtime.c main/speech/speech_model.c -o "${test_dir}/test_speech_runtime"
+    "${test_dir}/test_speech_runtime"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_ai_config.c main/ai/ai_config.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_ai_config"
+    "${test_dir}/test_ai_config"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/speech_stubs -Itests/score_stubs -Itests/bsp_stubs \
+        tests/test_ai_config_store.c main/ai/ai_config_store.c main/ai/ai_config.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_ai_config_store"
+    "${test_dir}/test_ai_config_store"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_app_network.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_app_network"
     "${test_dir}/test_app_network"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \

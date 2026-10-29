@@ -103,3 +103,16 @@ PNG 用于审阅，运行时不解码 PNG。
 ```bash
 python3 tools/generate_network_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
 ```
+
+### 离线中文语音音库
+
+`voices/esp_tts_voice_data_xiaoxin_small.dat` 为未修改的乐鑫 ESP-SR 小新精简音库，
+固定提交 `78a923d29a45e4e1433b909d3da12ab5b0f994fc`，下载自
+[上游音库目录](https://github.com/espressif/esp-sr/tree/78a923d29a45e4e1433b909d3da12ab5b0f994fc/esp-tts/esp_tts_chinese)。
+大小 2913777 字节；SHA-256：
+`cc9a81fd716b3c07fae3ca2f802dc026081896f2e34db9b9db117d4de5a85c01`。
+音库仅嵌入一次应用只读段，流式使用，不整体载入 RAM。
+原始乐鑫 MIT 许可保留于
+[`components/esp_tts/LICENSE`](../components/esp_tts/LICENSE)，使用范围限定于乐鑫产品。
+匹配 C3 库来源记录于
+[`components/esp_tts/README.zh_CN.md`](../components/esp_tts/README.zh_CN.md)。

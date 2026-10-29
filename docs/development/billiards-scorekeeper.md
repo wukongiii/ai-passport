@@ -342,7 +342,9 @@ remain unverified.
 
 ## Standalone QWERTY input laboratory
 
-The hall's Input Test remains independent of business fields and network services.
+The Input Test entry is removed from the production hall. Its standalone lab is
+retained only as a host preview fixture and is excluded from the firmware build.
+The reusable input component remains available to Wi-Fi setup.
 The previous frequency-based grouping and group-selection screens are discarded.
 This iteration implements a phone-style QWERTY 26-key keyboard, with separate
 number and symbol modes. Nine-key composition is deferred; it is not exposed as
@@ -610,8 +612,8 @@ log input or add its own Wi-Fi task. Application/UI callbacks remain nonblocking
 `network_setup` is an IDF/LVGL-independent workflow with focused host checks for
 scan selection, protected/open paths, manual entry, invalid credentials, cancel,
 confirmation semantics and disposal. Its UI mounts either a short list or the
-keyboard, never both, to fit the existing 32 KB LVGL pool. The existing lab stays
-available and uses unchanged gestures. `network_font_14` adds Flash-resident
+keyboard, never both, to fit the existing 32 KB LVGL pool. The host-only lab
+uses unchanged gestures. `network_font_14` adds Flash-resident
 2 bpp ASCII/CJK network-name coverage; unsupported characters display as `?`
 without altering submitted SSIDs. See the paired assets documentation for
 source/license and reproducible generation. Physical key timing, readability,
@@ -647,3 +649,132 @@ Device tests PASS for application-only write/hash at `0x10000`, 15-second
 startup and saved-network reconnect obtaining an IP at about 3.4 seconds;
 NVS and partition table preserved, serial closed. No panic/assert/reset loop
 observed. Physical readability remains Unverified. No commit or push.
+
+Input-entry removal validation, 2026-10-29: Build and Host tests PASS through
+the complete gate. Finite LVGL previews assert five production entries, exclude
+the lab and retain the Wi-Fi keyboard. Device tests PASS for application-only
+write/hash, 12-second startup and saved-network reconnect; NVS preserved.
+Archive/full-image SHA-256: `build/firmware/3d1e361f386dd3a1baafb2207b1b5528d043c385189f710458c59ed48a69c2e8/`.
+Matching ELF SHA-256: `f6bfefb62c7d3c575eb09a0defdc13ac543279a5818888a71d51fe5d7e568758`.
+Unverified: physical hall navigation. Serial closed; no commit or push.
+
+## Independent offline speech proof of concept
+
+The AI / Voice entry now opens a dedicated listening page. Left short press
+cycles three sample sentences, middle short press requests playback, right
+short press stops, and middle hold returns home and cancels playback. It never
+speaks automatically on boot or entry. Volume is fixed at 65 percent for this
+proof of concept. Game scoring does not yet submit speech events.
+
+`main/speech/app_speech` is an app-lifetime service independent of pages and
+LVGL. Call `app_speech_say()` with bounded UTF-8 text; it copies the request
+without blocking. A 650 ms quiet interval merges consecutive pending requests.
+An active sentence finishes before the latest pending sentence starts; requests
+never accumulate into an unbounded queue. Stop invalidates the pending request
+and cancels active playback at a PCM boundary. The worker alone owns synthesis,
+codec format and playback after startup, and never accesses UI objects. Its
+snapshot reports waiting, playing, completed, stopping and errors. Leaving the
+page cancels work without freeing service-owned data. No recognition or cloud
+service is included. Future games can call the same interface.
+
+`main/speech/speech_model` is platform-independent and tested for merge timing,
+latest-only replacement, cancel, UTF-8 validity and text bounds (120 bytes).
+The worker uses an 8 KB stack, 16 kHz / 16-bit mono streaming, 320-sample writes,
+conservative heap admission and lazy per-utterance TTS allocation/cleanup. Codec
+sleep is restored after playback. I2S IRAM-safe interrupts are enabled, but
+concurrent Flash/NVS stall immunity is not assumed. The pinned C3-only official
+TTS subset and its license are documented in
+[the component provenance](../../components/esp_tts/README.md). The 2913777-byte
+Xiaoxin small voice is Flash-mapped inside the factory app; the existing NVS,
+PHY and application partition layout is unchanged. Actual audibility, quality,
+stop latency, memory during synthesis and concurrent network use require board
+acceptance. A successful build or preview cannot establish those results.
+
+Offline speech validation, 2026-10-29: complete gate Build PASS and Host tests
+PASS. Finite real-LVGL previews cover both orientations, request, playing,
+stop, error and leave using a synthetic audio adapter (peak pool 24728 bytes).
+Archive/full-image SHA-256:
+`build/firmware/3b7de608bb27b093810462eac25ea53a36d274f2bbbe589cf53ff3fcce93f1ba/`.
+Matching ELF SHA-256: `78e517455f4306400e5795246785fc2bab5279059e009f45e414852c29602362`.
+The 5941840-byte app was flashed at `0x10000`, with unchanged partition table
+and preserved NVS. Device tests PASS for write/hash, 15-second startup and
+saved-network reconnect at about 3.7 seconds, with no panic/assert/reset loop.
+Connected free heap 99348 bytes, largest block 90112. Serial is closed. No TTS
+request was triggered during this startup check: actual synthesis, peak memory,
+stack margin, audible output and physical stop/merge remain Unverified and are
+handed to the user via the AI / Voice page. No commit or push.
+
+Speech wake correction, 2026-10-29: user playback returned decimal 259
+(`ESP_ERR_INVALID_STATE`). Startup and post-playback suspend the codec; calling
+`bsp_audio_set_format()` while suspended is rejected. The speech worker now
+initializes idempotently and calls `bsp_audio_wake()` before setting the format.
+A stateful codec regression reproduces failure with the old playback code and
+passes initial playback, replay after suspend, wake failure propagation and
+recovery with the fix. This host check does not validate real TTS output.
+
+Wake-fix complete gate: Build PASS, Host tests PASS. Verified archive/full-image
+SHA-256: `build/firmware/99a0876703ba35c1709b010c93fc6f595b84fed612d9420c5bae3f6389795195/`.
+Matching ELF SHA-256: `dafc100aa7c60b705c831fc6408bb79b9ef54ac80c257b371ede53ced485c9f1`.
+Device tests NOT RUN: the target USB port is unavailable; no firmware written.
+Unverified: actual TTS playback and replay on the board.
+
+Wake-fix device handoff, 2026-10-29: after the user reconnected the target,
+the verified 5942192-byte application from the above `99a087...` archive was
+flashed at `0x10000` with hash verification, preserving NVS and partitions.
+Device tests PASS for write/hash, matching ELF `dafc100aa...`, 15-second startup
+and saved-network reconnect at about 3.7 seconds; no panic/assert/reset loop.
+Connected free heap 99384 bytes, largest block 90112. Serial closed. Actual
+playback/replay remains Unverified pending user-triggered listening.
+
+## AI provider configuration
+
+The user confirmed successful offline playback after the codec wake fix.
+AI / Voice now opens a provider list (Doubao Seeduplex and OpenAI Realtime),
+plus the retained offline listening entry. Left/right choose and middle opens;
+middle hold returns one level, then from the list returns to the lobby.
+Each provider has its own registration/login QR code, phone configuration
+entry and activation action. No configured provider defaults to the onboarding
+list. The header, semantic hint colors and landscape rotations remain shared.
+
+Phone configuration opens the existing temporary password-free setup hotspot
+from AI / Voice. The first QR joins that hotspot; middle switches to a QR for
+`http://192.168.4.1/#ai/<provider>`. The mobile page has a separate AI / Voice
+section with provider selection, official account links, a password-type API
+key field, save-and-activate, activate-existing and delete actions. Account
+creation requires phone internet access; reconnect to the hotspot afterward.
+No cloud configuration is added to the general device settings.
+
+`main/ai/ai_config` owns provider metadata, bounded key validation and pure
+save/select/remove transitions. `ai_config_store` stores a versioned record in
+its own `ai_voice` NVS namespace. HTTP and UI only submit one bounded request;
+the existing network worker performs writes outside the button/LVGL context.
+Snapshots and HTTP responses contain configuration flags and request completion,
+never keys. Each provider retains its own key, saving activates that provider,
+and removing the active one falls back to another configured provider or none.
+A failed write/commit does not activate the new configuration. The portal waits
+for durable completion before reporting success. This is local configuration
+only: keys are marked saved / unverified, with no model request, ASR, scoring
+command transport or cloud audio implemented yet. Existing open-hotspot HTTP
+and ordinary NVS storage are retained for this personal-device increment.
+
+Focused host tests cover form bounds and duplicate/invalid fields, independent
+provider keys, activation/removal, deferred storage, restart, corrupt records
+and write/commit errors. Finite real-LVGL previews cover both landscape rotations,
+provider onboarding, account/hotspot/configuration QR pages and offline listening.
+These checks do not establish phone camera scanning or on-board cloud access.
+
+Configuration validation, 2026-10-29: full gate Build PASS, Host tests PASS.
+Both rotations decode all four preview QR payloads correctly (official account
+links, hotspot join and provider-targeted setup URL). Browser tests against a
+local simulated HTTP adapter passed separate provider saves, activation and
+removal at desktop and 390 px viewport widths; no real keys were used.
+LVGL preview peak remained 24728 bytes in the 32 KB pool.
+Verified archive/full SHA-256:
+`build/firmware/d5d6f9792c58864da3baae5a0a78fd612ab16d321452b516d67e0c1653e92847/`.
+Matching ELF SHA-256: `5140fcba72554f3804bde8a96275fb39e230d804fa009e4a95acd8af1c6eb990`.
+Device tests PASS only for app-only write/hash at `0x10000`, matching startup,
+15-second observation and saved Wi-Fi reconnect around 3.8 seconds. Connected
+free heap 98156, largest block 86016; no panic/assert/reset loop. NVS and partition
+table were preserved, serial closed. Unverified: physical buttons/layout,
+phone-camera scanning and real-hotspot save/restart acceptance. No model API
+call or Key validity test was made. No commit or push.

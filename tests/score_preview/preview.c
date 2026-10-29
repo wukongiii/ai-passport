@@ -7,7 +7,10 @@
 #include "app/app_ui.h"
 #include "input/text_input.h"
 #include "app/app_settings.h"
+#include "app/app_input_lab.h"
 #include "network/app_network.h"
+#include "speech/app_speech.h"
+#include "ai/ai_config.h"
 #include "app/app_preferences_store.h"
 #include "app/app_strings.h"
 #include "games/eight_module.h"
@@ -36,6 +39,14 @@ bool app_network_connect(const app_net_credentials_t *c){(void)c;return true;}
 
 void app_network_publish_preferences(const app_preferences_t *p){(void)p;}
 bool app_network_take_preferences(app_preferences_t *p){(void)p;return false;}
+static app_speech_snapshot_t speech_preview={.volume=65};
+bool app_speech_start(void){return true;}
+bool app_speech_say(const char *text){(void)text;speech_preview.state=SPEECH_WAITING;speech_preview.pending=true;++speech_preview.revision;return true;}
+void app_speech_stop(void){speech_preview.state=SPEECH_IDLE;speech_preview.pending=false;++speech_preview.revision;}
+void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_preview;}
+static ai_config_snapshot_t ai_preview={.ready=true,.active=AI_PROVIDER_NONE};
+void ai_config_snapshot(ai_config_snapshot_t *out){*out=ai_preview;}
+bool ai_config_submit(const ai_config_request_t *r,unsigned *id){(void)id;ai_preview.active=r->provider;ai_preview.revision++;return true;}
 static unsigned char frame[320*240*3];
 static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *data) {
     const uint16_t *p=(const uint16_t *)data;
@@ -97,6 +108,8 @@ int main(void) {
     old = lv_screen_active();
     assert(app_ui_create()); lv_obj_delete(old);
     unsigned count; const app_module_t *modules = app_registry(&count);
+    assert(count==5);
+    for(unsigned i=0;i<count;++i)assert(modules[i].id!=app_module_input_lab.id);
     app_modules_init(modules,count);
     app_container_t app; assert(app_container_init(&app, modules, count, APP_ROTATION_270));
     for (unsigned r=0; r<2; ++r) {
@@ -106,6 +119,28 @@ int main(void) {
         app.focus=4; app_ui_render(&app,85,""); advance(260); capture(r ? "services-90" : "services-270");
         app.page=APP_PAGE_PLACEHOLDER; app_ui_render(&app,85,"");
         capture(r ? "mock-90" : "mock-270");
+    }
+    // Real model configuration, QR and listening pages in both orientations.
+    for(unsigned r=0;r<2;++r){
+        app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=4;
+        ai_preview=(ai_config_snapshot_t){.ready=true,.active=AI_PROVIDER_NONE,.revision=ai_preview.revision+1};
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-empty-90" : "ai-empty-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-provider-90" : "ai-provider-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-doubao-qr-90" : "ai-doubao-qr-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-862C");
+        app_container_tick(&app,100);app_ui_render(&app,91,"");capture(r ? "ai-hotspot-90" : "ai-hotspot-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-phone-90" : "ai-phone-270");
+        ai_preview.configured[0]=true;ai_preview.active=0;++ai_preview.revision;app_container_tick(&app,200);
+        app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");capture(r ? "ai-saved-90" : "ai-saved-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-openai-qr-90" : "ai-openai-qr-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r ? "voice-ready-90" : "voice-ready-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);assert(speech_preview.state==SPEECH_WAITING);
+        app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");
+        assert(speech_preview.state==SPEECH_IDLE);app_container_input(&app,1,APP_GESTURE_LONG);assert(app.page==APP_PAGE_HOME);
     }
     // One wrap, reversal during motion, then exit mid-animation.
     app.page=APP_PAGE_HOME; app.focus=0; app_ui_render(&app,85,"");
@@ -209,10 +244,14 @@ int main(void) {
         app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,1,APP_GESTURE_LONG);net_preview.portal=false;net_preview.state=APP_NET_OFFLINE;net_preview.associated=false;net_preview.reason=0;net_preview.error=0;net_preview.revision++;
     }
+    // The lab is a host-only fixture, never registered in the production hall.
+    const app_module_t lab_modules[]={app_module_input_lab};
+    app_modules_init(lab_modules,1);
+    assert(app_container_init(&app,lab_modules,1,APP_ROTATION_270));
     // Bounded QWERTY sessions: all modes/menu/confirmation, both rotations.
     for(unsigned r=0;r<2;++r){
         app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;
-        app.page=APP_PAGE_HOME;app.focus=5;
+        app.page=APP_PAGE_HOME;app.focus=0;
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
         app_container_tick(&app,1000000);
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");

@@ -1,5 +1,10 @@
 idf_component_register(
     SRCS "main.c"
+         "ai/ai_config.c"
+         "ai/ai_config_store.c"
+         "speech/speech_model.c"
+         "speech/app_speech.c"
+         "app/app_voice.c"
          "ui/app_header.c"
          "network/app_network.c"
          "network/network_setup.c"
@@ -9,7 +14,6 @@ idf_component_register(
          "app/app_container.c"
          "app/app_registry.c"
          "app/app_ui.c"
-         "app/app_input_lab.c"
          "input/text_input.c"
          "input/text_input_ui.c"
          "app/app_preferences.c"
@@ -35,5 +39,8 @@ idf_component_register(
          "../assets/fonts/score_font_inventory.c"
     EMBED_TXTFILES "network/portal.html"
     INCLUDE_DIRS "."
-    REQUIRES bsp esp_hw_support esp_timer nvs_flash esp_app_format esp_wifi esp_netif esp_event esp_http_server esp_driver_gpio json
+    REQUIRES esp_tts bsp esp_hw_support esp_timer nvs_flash esp_app_format esp_wifi esp_netif esp_event esp_http_server esp_driver_gpio json
 )
+
+# Voice data stays memory mapped in app rodata; preserve the existing partitions.
+target_add_binary_data(${COMPONENT_LIB} "${CMAKE_CURRENT_LIST_DIR}/../assets/voices/esp_tts_voice_data_xiaoxin_small.dat" BINARY)

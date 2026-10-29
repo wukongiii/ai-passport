@@ -1,5 +1,6 @@
 #include "app_network.h"
 #include "app_network_socket.h"
+#include "../ai/ai_config.h"
 #include "cJSON.h"
 #include "esp_event.h"
 #include "esp_heap_caps.h"
@@ -134,6 +135,39 @@ static esp_err_t status(httpd_req_t *r){
     char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
     headers(r);httpd_resp_set_type(r,"application/json");esp_err_t e=httpd_resp_send(r,json,HTTPD_RESP_USE_STRLEN);cJSON_free(json);return e;
 }
+static esp_err_t ai_status(httpd_req_t *r){
+    if(!local_request(r,false))return deny(r);
+    ai_config_snapshot_t s;ai_config_snapshot(&s);
+    cJSON *body=cJSON_CreateObject();if(!body)return ESP_ERR_NO_MEM;
+    cJSON_AddBoolToObject(body,"ready",s.ready);cJSON_AddBoolToObject(body,"busy",s.busy);
+    cJSON_AddNumberToObject(body,"active",s.active);cJSON_AddNumberToObject(body,"error",s.error);
+    cJSON_AddNumberToObject(body,"submitted",s.submitted);cJSON_AddNumberToObject(body,"completed",s.completed);
+    cJSON *list=cJSON_AddArrayToObject(body,"providers");
+    if(!list){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
+    for(unsigned i=0;i<AI_PROVIDER_COUNT;++i){
+        const ai_provider_t *p=ai_provider(i);cJSON *item=cJSON_CreateObject();
+        if(!item){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
+        cJSON_AddStringToObject(item,"id",p->id);cJSON_AddStringToObject(item,"name",p->name);
+        cJSON_AddStringToObject(item,"model",p->model);cJSON_AddStringToObject(item,"url",p->signup_url);
+        cJSON_AddBoolToObject(item,"configured",s.configured[i]);cJSON_AddItemToArray(list,item);
+    }
+    char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
+    headers(r);httpd_resp_set_type(r,"application/json");
+    esp_err_t e=httpd_resp_send(r,json,HTTPD_RESP_USE_STRLEN);cJSON_free(json);return e;
+}
+static esp_err_t ai_submit(httpd_req_t *r){
+    if(!local_request(r,true))return deny(r);
+    if(!r->content_len || r->content_len>APP_NET_FORM_MAX)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Invalid request size");
+    char form[APP_NET_FORM_MAX+1]={0};unsigned received=0;
+    while(received<r->content_len){int n=httpd_req_recv(r,form+received,r->content_len-received);
+        if(n<=0){memset(form,0,sizeof(form));return ESP_FAIL;}received+=(unsigned)n;}
+    ai_config_request_t request={0};unsigned id=0;
+    bool ok=!memchr(form,0,received) && ai_config_parse(form,&request) && ai_config_submit(&request,&id);
+    memset(form,0,sizeof(form));memset(&request,0,sizeof(request));headers(r);
+    if(!ok)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Invalid model/key or device busy");
+    char result[48];snprintf(result,sizeof(result),"{\"request\":%u}",id);
+    httpd_resp_set_status(r,"202 Accepted");httpd_resp_set_type(r,"application/json");return httpd_resp_send(r,result,HTTPD_RESP_USE_STRLEN);
+}
 static esp_err_t networks(httpd_req_t *r){
     if(!local_request(r,false))return deny(r);
     app_net_scan_t snapshot;
@@ -204,12 +238,14 @@ static void poll_dns(void){
 }
 static esp_err_t start_http(void){
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();cfg.stack_size=6144;cfg.max_open_sockets=3;
+    cfg.max_uri_handlers=8;
     cfg.lru_purge_enable=true;cfg.recv_wait_timeout=3;cfg.send_wait_timeout=3;
     esp_err_t e=httpd_start(&server,&cfg);if(e!=ESP_OK)return e;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=root}, {.uri="/api/status",.method=HTTP_GET,.handler=status},
         {.uri="/api/wifi",.method=HTTP_POST,.handler=submit}, {.uri="/api/settings",.method=HTTP_POST,.handler=submit},
-        {.uri="/api/networks",.method=HTTP_GET,.handler=networks}, {.uri="/api/scan",.method=HTTP_POST,.handler=request_scan}};
+        {.uri="/api/networks",.method=HTTP_GET,.handler=networks}, {.uri="/api/scan",.method=HTTP_POST,.handler=request_scan},
+        {.uri="/api/ai",.method=HTTP_GET,.handler=ai_status}, {.uri="/api/ai",.method=HTTP_POST,.handler=ai_submit}};
     for(unsigned i=0;i<sizeof(routes)/sizeof(routes[0]);++i){e=httpd_register_uri_handler(server,&routes[i]);if(e!=ESP_OK){httpd_stop(server);server=NULL;return e;}}
     e=httpd_register_err_handler(server,HTTPD_404_NOT_FOUND,redirect);
     if(e!=ESP_OK){httpd_stop(server);server=NULL;}
@@ -333,11 +369,12 @@ static esp_err_t initialize(void){
     return ESP_OK;
 }
 static void worker(void *arg){
-    (void)arg;app_network_snapshot_t s={0};esp_err_t e=initialize();s.saved=app_net_credentials_valid(&saved);
+    (void)arg;ai_config_service_init();app_network_snapshot_t s={0};esp_err_t e=initialize();s.saved=app_net_credentials_valid(&saved);
     if(e!=ESP_OK){s.state=APP_NET_FAILED;s.error=e;cleanup();publish(&s);vTaskDelete(NULL);return;}
     s.ready=true;if(s.saved){e=connect_to(&saved,false,&s);if(e!=ESP_OK)failed(&s,e);}publish(&s);
     ESP_LOGI(TAG,"Network service ready; free heap=%u largest=%u",(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     for(;;){
+        ai_config_service_poll();
         command_t c={0};bool change=false;
         if(xQueueReceive(commands,&c,pdMS_TO_TICKS(250))==pdTRUE){change=true;e=ESP_OK;
             switch(c.type){

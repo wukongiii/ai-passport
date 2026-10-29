@@ -9,6 +9,7 @@
 #include "score/score_input.h"
 #include "app/app_settings.h"
 #include "network/app_network.h"
+#include "speech/app_speech.h"
 #include "esp_app_desc.h"
 #include "score/score_strings.h"
 #include "esp_heap_caps.h"
@@ -60,9 +61,10 @@ void app_main(void) {
     }
     bsp_display_backlight(app_settings_preferences()->brightness);
     const bool battery_ready = bsp_battery_init() == ESP_OK;
-    // Audio is unused. Suspend the powered codec even if PCM was never opened.
+    // Start silent; only the speech worker owns audio after this initialization.
     if (bsp_audio_init() == ESP_OK && bsp_audio_sleep() != ESP_OK)
         ESP_LOGW(TAG, "Codec suspend failed; power draw remains unverified");
+    if(!app_speech_start())ESP_LOGW(TAG,"Speech worker unavailable");
     s_input_queue = xQueueCreate(16, sizeof(input_event_t));
     if (!s_input_queue) {
         ESP_LOGE(TAG, "Input queue allocation failed");

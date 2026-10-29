@@ -112,3 +112,17 @@ No full glyph atlas is allocated in RAM. Regenerate with:
 ```bash
 python3 tools/generate_network_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
 ```
+
+### Offline Chinese speech voice
+
+`voices/esp_tts_voice_data_xiaoxin_small.dat` is the unmodified Espressif
+ESP-SR Xiaoxin small voice at commit
+`78a923d29a45e4e1433b909d3da12ab5b0f994fc`, downloaded from
+[the upstream voice directory](https://github.com/espressif/esp-sr/tree/78a923d29a45e4e1433b909d3da12ab5b0f994fc/esp-tts/esp_tts_chinese).
+Size: 2913777 bytes; SHA-256:
+`cc9a81fd716b3c07fae3ca2f802dc026081896f2e34db9b9db117d4de5a85c01`.
+It is embedded once in application rodata and streamed, not loaded entirely into
+RAM. The unchanged Espressif MIT license is retained at
+[`components/esp_tts/LICENSE`](../components/esp_tts/LICENSE); use is restricted
+to Espressif products. The matching C3 library provenance is recorded in
+[`components/esp_tts/README.md`](../components/esp_tts/README.md).
