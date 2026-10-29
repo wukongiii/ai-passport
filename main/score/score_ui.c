@@ -2,6 +2,7 @@
 #include "score_strings.h"
 #include "score_config.h"
 #include "../ui/app_range.h"
+#include "../ui/app_header.h"
 #include "lvgl.h"
 #include <stdio.h>
 
@@ -14,7 +15,7 @@ LV_FONT_DECLARE(score_font_16);
 #define GOLD 0xEDC56B
 #define BLUE 0x74C5D9
 
-static lv_obj_t *s_screen, *s_board, *s_dialog, *s_battery, *s_race, *s_status, *s_storage;
+static lv_obj_t *s_screen, *s_board, *s_dialog, *s_status, *s_storage;
 static lv_obj_t *s_cards[2], *s_points[2], *s_menu_rows[2];
 static lv_obj_t *s_title, *s_detail, *s_target_hint;
 static app_range_t s_target_range;
@@ -61,8 +62,6 @@ bool score_ui_create(void *content) {
             glyph.is_placeholder) return false;
     }
     s_screen = content;
-    label(s_screen, 26, 7, 100, TXT_TITLE, &score_font_16, INK);
-    s_battery = label(s_screen, 247, 9, 48, "--%", &lv_font_montserrat_14, MUTED);
     s_board = panel(s_screen, 0, 28, 320, 128);
     lv_obj_set_style_bg_color(s_board, lv_color_hex(BG), 0);
     lv_obj_set_style_border_width(s_board, 0, 0);
@@ -73,7 +72,6 @@ bool score_ui_create(void *content) {
         s_points[i] = label(s_cards[i], 5, 23, 120, "0", &lv_font_montserrat_48, INK);
     }
     label(s_board, 145, 30, 30, ":", &lv_font_montserrat_32, MUTED);
-    s_race = label(s_screen, 132, 7, 82, "", &score_font_16, GOLD);
     s_dialog = panel(s_screen, 16, 29, 288, 124);
     s_title = label(s_dialog, 8, 5, 272, "", &score_font_16, GOLD);
     s_detail = label(s_dialog, 4, 38, 280, "", &score_font_16, INK);
@@ -98,8 +96,7 @@ void score_ui_render(const score_session_t *s, const score_controller_t *ui,
     }
     lv_obj_set_y(s_status, height - 36);
     lv_obj_set_y(s_storage, height - 17);
-    if (battery < 0) lv_label_set_text(s_battery, "--%");
-    else lv_label_set_text_fmt(s_battery, "%d%%", battery);
+    (void)battery;
     lv_label_set_text(s_status, status);
     lv_label_set_text(s_storage, storage);
     const bool board = ui->page == SCORE_PAGE_BOARD;
@@ -110,7 +107,8 @@ void score_ui_render(const score_session_t *s, const score_controller_t *ui,
         lv_obj_add_flag(s_board, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(s_dialog, LV_OBJ_FLAG_HIDDEN);
     }
-    lv_label_set_text_fmt(s_race, TXT_RACE, (unsigned)s->state.target);
+    char context[40];snprintf(context,sizeof(context),TXT_RACE,(unsigned)s->state.target);
+    app_header_context(ui->page==SCORE_PAGE_BOARD ? context : ui->page==SCORE_PAGE_SETTINGS ? TXT_SETTINGS : ui->page==SCORE_PAGE_TARGET ? TXT_RACE_TITLE : TXT_NEW_TITLE);
     for (unsigned i = 0; i < 2; ++i) {
         if (ui->page == SCORE_PAGE_SETTINGS) lv_obj_remove_flag(s_menu_rows[i], LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s_menu_rows[i], LV_OBJ_FLAG_HIDDEN);

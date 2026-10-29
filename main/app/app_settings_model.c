@@ -12,7 +12,7 @@ bool app_settings_model_input(app_settings_model_t *m, app_preferences_t *p, uns
     if(gesture==APP_GESTURE_LONG && slot==1) { m->editing=false; m->draft=*p; return false; }
     if(gesture!=APP_GESTURE_SHORT) return false;
     if(slot==1) {
-        if(m->focus==APP_SETTING_INFO) return false;
+        if(m->focus==APP_SETTING_INFO || m->focus==APP_SETTING_NETWORK) return false;
         if(!m->editing) {m->editing=true; m->draft=*p; return false;}
         *p=m->draft; m->editing=false; return true;
     }
@@ -20,7 +20,7 @@ bool app_settings_model_input(app_settings_model_t *m, app_preferences_t *p, uns
     if(!m->editing) {m->focus=(m->focus+APP_SETTING_COUNT+delta)%APP_SETTING_COUNT; return false;}
     static const uint16_t dims[]={15,30,60,120,0}, blanks[]={60,120,300,600,0};
     switch(m->focus) {
-    case APP_SETTING_DIRECTION: m->draft.rotation=slot==0 ? APP_ROTATION_270 : APP_ROTATION_90; break;
+    case APP_SETTING_DIRECTION: m->draft.rotation=m->draft.rotation==APP_ROTATION_270 ? APP_ROTATION_90 : APP_ROTATION_270; break;
     case APP_SETTING_BRIGHTNESS:
         if((delta<0 && m->draft.brightness>20)||(delta>0 && m->draft.brightness<100)) m->draft.brightness+=10*delta;
         break;

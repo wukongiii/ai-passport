@@ -1,4 +1,5 @@
 #include "app_input_lab.h"
+#include "../ui/app_header.h"
 #include "../input/text_input.h"
 #include "../input/text_input_ui.h"
 #include "../input/text_input_strings.h"
@@ -9,7 +10,7 @@ LV_FONT_DECLARE(score_font_14);
 static const char *const tasks[]={TXT_INPUT_SHORT,TXT_INPUT_DIGITS,TXT_INPUT_MIXED,TXT_INPUT_FREE_TASK};
 static const char *const targets[]={"there","1234567890","Ther_2026!",""};
 static struct {text_input_t editor;unsigned task,page;uint64_t now,last_tick;bool active;} state;
-static lv_obj_t *heading,*battery,*summary,*detail,*note,*target;
+static lv_obj_t *summary,*detail,*note,*target;
 static text_input_ui_t ui;
 static void begin(void){
     text_input_config_t config={.maximum_length=63,.numeric_only=state.task==1};
@@ -68,15 +69,12 @@ static bool create(void *c,void *p){
         lv_font_glyph_dsc_t glyph={0};
         if(!lv_font_get_glyph_dsc(&score_font_14,&glyph,score_font_codepoints[i],0) || glyph.is_placeholder)return false;
     }
-    heading=label(p,2,0xEDC56B);lv_obj_set_width(heading,210);
-    battery=label(p,2,0xA6B5B7);lv_obj_set_x(battery,244);lv_obj_set_width(battery,54);
     summary=label(p,47,0xF2F3E9);detail=label(p,82,0x74C5B5);note=label(p,117,0xA6B5B7);target=label(p,145,0xEDC56B);
     text_input_ui_create(&ui,p,&score_font_14);return true;
 }
 static void show(lv_obj_t *o,bool yes){if(yes)lv_obj_remove_flag(o,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(o,LV_OBJ_FLAG_HIDDEN);}
 static void render(void *c,const app_module_view_t *v){
-    (void)c;lv_label_set_text(heading,state.page==1 && *targets[state.task] ? targets[state.task] : TXT_INPUT_TITLE);
-    if(v->battery<0)lv_label_set_text(battery,"--%");else lv_label_set_text_fmt(battery,"%d%%",v->battery);
+    (void)c;app_header_context(state.page==1 && *targets[state.task] ? targets[state.task] : tasks[state.task]);
     show(ui.root,state.page==1);show(summary,state.page!=1);show(detail,state.page!=1);show(note,state.page!=1);show(target,state.page!=1);
     if(state.page==1){text_input_ui_render(&ui,&state.editor,state.now,v->content_height);return;}
     if(!state.page){

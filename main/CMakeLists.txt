@@ -1,5 +1,11 @@
 idf_component_register(
     SRCS "main.c"
+         "ui/app_header.c"
+         "network/app_network.c"
+         "network/network_setup.c"
+         "network/network_setup_ui.c"
+         "../assets/fonts/network_font_14.c"
+         "network/app_network_model.c"
          "app/app_container.c"
          "app/app_registry.c"
          "app/app_ui.c"
@@ -27,6 +33,7 @@ idf_component_register(
          "../assets/fonts/score_font_14.c"
          "../assets/fonts/score_font_16.c"
          "../assets/fonts/score_font_inventory.c"
+    EMBED_TXTFILES "network/portal.html"
     INCLUDE_DIRS "."
-    REQUIRES bsp esp_hw_support esp_timer nvs_flash esp_app_format
+    REQUIRES bsp esp_hw_support esp_timer nvs_flash esp_app_format esp_wifi esp_netif esp_event esp_http_server esp_driver_gpio json
 )

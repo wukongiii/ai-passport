@@ -91,3 +91,15 @@ PYTHONPATH=build/art-tools python3 tools/generate_launcher_art.py --font build/f
 
 源文件为 `tools/generate_launcher_art.py`。固件与主机预览各编译生成的 C 一次；
 PNG 用于审阅，运行时不解码 PNG。
+
+### 网络名字体
+
+`fonts/network_font_14.c` 使用与记分字库相同的固定版本 Noto CJK 源和 OFL 许可。
+包含可打印 ASCII、U+4E00..U+9FFF 中日韩统一表意文字、CJK 标点和全角 ASCII，
+字号 14 像素、2 bpp。该字库单独驻留 Flash，用于动态 Wi-Fi 名称；固定文案
+继续使用经过覆盖检查的小型应用字库。未覆盖字符仅显示为 `?`，连接时保留原 SSID 字节。
+不在 RAM 中分配完整字形图集。重新生成：
+
+```bash
+python3 tools/generate_network_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
+```

@@ -3,9 +3,11 @@
 #include "score/score_ui.h"
 #include "score/score_strings.h"
 #include "ui/app_shell.h"
+#include "ui/app_header.h"
 #include "app/app_ui.h"
 #include "input/text_input.h"
 #include "app/app_settings.h"
+#include "network/app_network.h"
 #include "app/app_preferences_store.h"
 #include "app/app_strings.h"
 #include "games/eight_module.h"
@@ -19,6 +21,21 @@ score_store_status_t score_store_open(score_session_t *s) { (void)s; return SCOR
 esp_err_t score_store_save(const score_session_t *s) { (void)s; return ESP_OK; }
 app_pref_store_status_t app_preferences_load(app_preferences_t *p) { *p=app_preferences_default();return APP_PREF_DEFAULT; }
 esp_err_t app_preferences_save(const app_preferences_t *p) { (void)p; return ESP_OK; }
+// Network snapshot adapter: exercise real settings UI without radio hardware.
+static app_network_snapshot_t net_preview={.ready=true,.revision=1};
+void app_network_snapshot(app_network_snapshot_t *s){*s=net_preview;}
+bool app_network_portal(bool on){net_preview.portal=on;net_preview.seconds_left=300;net_preview.revision++;return true;}
+bool app_network_forget(void){net_preview.saved=false;net_preview.revision++;return true;}
+bool app_network_retry(void){return true;}
+static app_net_scan_t scan_preview;
+void app_network_scan_snapshot(app_net_scan_t *out){*out=scan_preview;}
+bool app_network_scan(void){scan_preview.scanning=false;scan_preview.attempted=true;scan_preview.count=2;scan_preview.revision++;
+    snprintf(scan_preview.entries[0].ssid,33,"台球室网络");scan_preview.entries[0].secured=true;scan_preview.entries[0].rssi=-42;
+    snprintf(scan_preview.entries[1].ssid,33,"Guest");scan_preview.entries[1].secured=false;scan_preview.entries[1].rssi=-65;return true;}
+bool app_network_connect(const app_net_credentials_t *c){(void)c;return true;}
+
+void app_network_publish_preferences(const app_preferences_t *p){(void)p;}
+bool app_network_take_preferences(app_preferences_t *p){(void)p;return false;}
 static unsigned char frame[320*240*3];
 static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *data) {
     const uint16_t *p=(const uint16_t *)data;
@@ -47,6 +64,7 @@ int main(void) {
     extern const lv_font_t score_font_16;
     app_shell_t game_shell; app_shell_create(&game_shell, &score_font_16);
     lv_screen_load(game_shell.screen);
+    app_header_create(game_shell.screen);
     assert(score_ui_create(game_shell.content));
     score_session_t s;score_session_init(&s);score_controller_t ui;score_controller_init(&ui,&s);
     for (unsigned r = 0; r < 2; ++r) {
@@ -60,6 +78,7 @@ int main(void) {
             app_shell_render(&game_shell, ui.rotation, &b);
             score_ui_render(&s,&ui,app_content_rect(ui.rotation,app_binding_rows(&b)).height,
                             85,TXT_RESTORED,TXT_SAVING_FAILED);
+            app_header_render(app_content_rect(ui.rotation,app_binding_rows(&b)).y,TXT_APP_EIGHT,85,false);
             char name[64]; snprintf(name,sizeof(name),"page-%u-%s",page,suffix); capture(name);
         }
     }
@@ -135,6 +154,61 @@ int main(void) {
     app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-brightness-270");
     app_container_input(&app,1,APP_GESTURE_LONG);
     app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,91,"");
+    // Network settings entry, hotspot details, clear-confirm and both orientations.
+    for(unsigned r=0;r<2;++r){
+        app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=3;
+        app_container_input(&app,1,APP_GESTURE_SHORT);
+        if(app_settings_preferences()->rotation!=app.rotation){
+            app_container_input(&app,1,APP_GESTURE_SHORT);
+            app_container_input(&app,2,APP_GESTURE_SHORT);
+            app_container_input(&app,1,APP_GESTURE_SHORT);
+        }
+        assert(app.rotation==(r ? APP_ROTATION_90 : APP_ROTATION_270));
+        for(unsigned i=0;i<5;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r ? "network-summary-offline-90" : "network-summary-offline-270");
+        net_preview.state=APP_NET_CONNECTED;
+        snprintf(net_preview.ssid,sizeof(net_preview.ssid),"台球室网络");
+        snprintf(net_preview.ip,sizeof(net_preview.ip),"192.168.100.125");net_preview.revision++;
+        app_container_tick(&app,1800000);app_ui_render(&app,91,"");capture(r ? "network-summary-connected-90" : "network-summary-connected-270");
+        snprintf(net_preview.ssid,sizeof(net_preview.ssid),"ABCDEFGHIJKLMNOPQRSTUVWXYZ123456");net_preview.revision++;
+        app_container_tick(&app,1900000);app_ui_render(&app,91,"");capture(r ? "network-summary-long-90" : "network-summary-long-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-summary-to-info-90" : "network-summary-to-info-270");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-summary-return-90" : "network-summary-return-270");
+        net_preview.state=APP_NET_OFFLINE;net_preview.ssid[0]=0;net_preview.ip[0]=0;net_preview.revision++;
+        app_container_tick(&app,1950000);
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        capture(r ? "network-offline-90" : "network-offline-270");
+        net_preview.portal=true;net_preview.saved=true;net_preview.seconds_left=280;
+        snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-DEMO");
+        net_preview.revision++;
+        app_container_tick(&app,2000000);app_ui_render(&app,91,"");capture(r ? "network-hotspot-90" : "network-hotspot-270");
+        net_preview.state=APP_NET_CONNECTING;net_preview.busy=true;net_preview.attempt=2;net_preview.attempt_seconds=18;net_preview.revision++;
+        app_container_tick(&app,2100000);app_ui_render(&app,91,"");capture(r ? "network-connecting-90" : "network-connecting-270");
+        net_preview.associated=true;net_preview.revision++;
+        app_container_tick(&app,2200000);app_ui_render(&app,91,"");capture(r ? "network-ip-wait-90" : "network-ip-wait-270");
+        net_preview.state=APP_NET_CONNECTED;net_preview.busy=false;snprintf(net_preview.ssid,sizeof(net_preview.ssid),"台球室网络");snprintf(net_preview.ip,sizeof(net_preview.ip),"192.168.100.125");net_preview.revision++;
+        app_container_tick(&app,2300000);app_ui_render(&app,91,"");capture(r ? "network-success-90" : "network-success-270");
+        net_preview.save_error=1;net_preview.revision++;
+        app_container_tick(&app,2400000);app_ui_render(&app,91,"");capture(r ? "network-save-failed-90" : "network-save-failed-270");
+        net_preview.state=APP_NET_FAILED;net_preview.reason=202;net_preview.error=1;net_preview.save_error=0;net_preview.ip[0]=0;net_preview.revision++;
+        app_container_tick(&app,2500000);app_ui_render(&app,91,"");capture(r ? "network-auth-failed-90" : "network-auth-failed-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_container_tick(&app,2600000);app_ui_render(&app,91,"");capture(r ? "network-list-90" : "network-list-270");
+        net_preview.state=APP_NET_OFFLINE;net_preview.revision++;app_container_tick(&app,2700000);
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-keyboard-90" : "network-keyboard-270");
+        // Use the editor's visible menu to cancel, preserving keyboard behavior.
+        app_container_input(&app,1,APP_GESTURE_DOUBLE);
+        app_container_input(&app,2,APP_GESTURE_LONG);app_container_input(&app,2,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r ? "network-connect-confirm-90" : "network-connect-confirm-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_LONG);
+        for(unsigned i=0;i<3;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-forget-90" : "network-forget-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,1,APP_GESTURE_LONG);net_preview.portal=false;net_preview.state=APP_NET_OFFLINE;net_preview.associated=false;net_preview.reason=0;net_preview.error=0;net_preview.revision++;
+    }
     // Bounded QWERTY sessions: all modes/menu/confirmation, both rotations.
     for(unsigned r=0;r<2;++r){
         app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;

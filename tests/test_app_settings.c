@@ -29,5 +29,10 @@ int main(void) {
     app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);assert(m.draft.dim_seconds==120);
     app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);assert(m.draft.dim_seconds==60);
     app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(p.dim_seconds==0);
+    app_settings_model_enter(&m,&p);p.rotation=APP_ROTATION_90;m.draft=p;
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
+    app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
+    assert(m.draft.rotation==APP_ROTATION_270 && p.rotation==APP_ROTATION_90);
+    assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT) && p.rotation==APP_ROTATION_270);
     puts("Settings codec, corruption, idle thresholds, preview/cancel/confirm and infinity endpoint: PASS");
 }

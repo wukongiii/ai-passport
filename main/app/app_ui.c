@@ -1,6 +1,7 @@
 #include "app_ui.h"
 #include "app_strings.h"
 #include "app_carousel.h"
+#include "../ui/app_header.h"
 #include "../ui/app_shell.h"
 #include "lvgl.h"
 
@@ -8,7 +9,7 @@ LV_FONT_DECLARE(score_font_16);
 static app_shell_t shell;
 static const app_module_t *mounted;
 static app_page_t mounted_page;
-static lv_obj_t *title, *battery_label, *detail, *note, *counter;
+static lv_obj_t *detail, *note, *counter;
 static bool failed;
 
 static lv_obj_t *label(lv_obj_t *parent, int x, int y, int width, const char *text, uint32_t color) {
@@ -31,6 +32,7 @@ bool app_ui_create(void) {
             return false;
     }
     app_shell_create(&shell, &score_font_16);
+    app_header_create(shell.screen);
     mounted = NULL; mounted_page = (app_page_t)-1;
     lv_screen_load(shell.screen);
     return true;
@@ -39,8 +41,6 @@ bool app_ui_create(void) {
 static void create_container_page(const app_container_t *app) {
     if (app->page == APP_PAGE_HOME)
         app_carousel_create(shell.content, app->modules, app->count, app->focus);
-    title = label(shell.content, 22, 7, 210, TXT_APP_GAMES, 0xEDC56B);
-    battery_label = label(shell.content, 244, 9, 54, "", 0xA6B5B7);
     detail = label(shell.content, 18, 178, 284, "", 0xB5C9C9);
     note = label(shell.content, 18, 115, 284, "", 0xA6B5B7);
     counter = label(shell.content, 115, 199, 90, "", 0x89A8AB);
@@ -60,19 +60,18 @@ void app_ui_render(const app_container_t *app, int battery, const char *overlay)
         }
         else create_container_page(app);
     }
+    app_header_context("");
     if (app->page == APP_PAGE_MODULE) {
         if (!failed) {
             const app_module_view_t view = {app->rotation,
                 app_content_rect(app->rotation, app_binding_rows(&bindings)).height, battery, overlay};
             active->ops->ui_render(active->context, &view);
         }
+        app_header_render(app_content_rect(app->rotation,app_binding_rows(&bindings)).y,active->title,battery,false);
         return;
     }
-    if (battery < 0) lv_label_set_text(battery_label, "--%");
-    else lv_label_set_text_fmt(battery_label, "%d%%", battery);
     lv_label_set_text(note, overlay && *overlay ? overlay : "");
     if (app->page == APP_PAGE_HOME) {
-        lv_label_set_text(title, TXT_APP_GAMES);
         app_carousel_select(app->focus);
         lv_label_set_text_fmt(counter, "%u / %u", app->focus + 1, app->count);
         lv_obj_set_pos(note, 18, 199);
@@ -80,10 +79,10 @@ void app_ui_render(const app_container_t *app, int battery, const char *overlay)
         else lv_obj_remove_flag(counter, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(detail, app->modules[app->focus].description);
     } else {
-        lv_label_set_text(title, active->title);
         lv_obj_set_pos(note, 18, 80);
         lv_label_set_text(note, TXT_APP_MOCK);
         lv_obj_set_pos(detail, 18, 119);
         lv_label_set_text(detail, TXT_APP_MOCK_NOTE);
     }
+    app_header_render(app_content_rect(app->rotation,app_binding_rows(&bindings)).y,active ? active->title : "",battery,app->page==APP_PAGE_HOME);
 }

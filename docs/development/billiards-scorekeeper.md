@@ -320,7 +320,8 @@ Host checks cover codec corruption, timeout boundaries, bounded adjustments,
 cancel/confirm, legacy migration and NVS read/write/commit failures. Finite
 LVGL previews cover range endpoints, infinity, both orientations, device info,
 confirmed direction propagation and cancellation. No stress loop is used.
-Wi-Fi provisioning, AI/voice and hardware sleep remain deferred.
+Wi-Fi provisioning was deferred at this checkpoint; it is implemented below.
+AI/voice and hardware sleep remain deferred.
 
 
 Settings build verification, 2026-10-29: Build PASS (complete ESP-IDF 5.5.3 gate),
@@ -399,3 +400,250 @@ startup, without observed panic/assert/reset loops. Settings/NVS and partition
 table were not overwritten; serial closed.
 Unverified: exhaustive physical key operation, gesture timing and practical
 input efficiency. The user accepted this version.
+
+## Hotspot provisioning and phone settings
+
+Open App Settings, select Network Connection, then enter the network page and
+press the middle key to enable the setup hotspot. The device displays a
+`Billiards-xxxx` open SSID (no hotspot password) and
+`http://192.168.4.1/`. Connect the phone to that hotspot and retain the connection
+when it reports no Internet access. DNS/HTTP captive redirects assist automatic
+opening; manually enter the URL when the phone does not open a page. Automatic
+opening depends on the phone and is not guaranteed. No BLE or mini program is
+required. The hotspot expires after five minutes or can be closed on the device.
+
+The local page accepts a manually entered 2.4 GHz Wi-Fi SSID/password and also
+provides direction, brightness, dim and blank settings using the same bounded
+ranges as the device. A nearby-network selector is now provided as described below.
+Changes apply through the existing settings owner and persistence retry path.
+A successful HTTP submission acknowledges receipt, not durable saving. The page
+shows connection state, IP and device errors. A successful station association
+and DHCP address are required before replacing saved credentials; a wrong
+password leaves the previous network record untouched. Up to three delayed
+retries use 2/4/6-second intervals; individual attempts time out after 20 seconds.
+Boot reconnects to saved credentials. The network page provides Retry and
+confirmed Forget. Forget erases only the application's station record.
+
+`main/network` isolates form/credential/DNS/timing policy from the Wi-Fi worker.
+Button handlers enqueue requests. Wi-Fi events enqueue bounded records; only
+the service worker handles networking and its NVS namespace. HTTP queues display
+changes for the application owner; it never accesses LVGL or settings storage.
+Management requests require a connection addressed to the setup AP interface;
+API requests also check the canonical host, and writes require a per-session
+token. The HTTP page is local; the setup hotspot is open and its radio link is
+not encrypted. NVS credentials are not encrypted at rest. Passwords are never logged. No Internet reachability,
+cloud API, AI/voice transport or permanent LAN management service is claimed.
+The network service lasts for the application lifetime and stores no UI pointers.
+Wi-Fi buffers and HTTP connections are bounded for this no-PSRAM board.
+
+The captive DNS/HTTP approach follows the ESP-IDF 5.5.3
+[captive portal example](https://github.com/espressif/esp-idf/tree/v5.5.3/examples/protocols/http_server/captive_portal).
+The settings page and device UI are application-specific implementations.
+Focused host checks cover strict decoding, credential limits, shared setting
+validation, malformed DNS packets, retry limits and timeout boundaries. Finite
+LVGL previews cover the offline, hotspot and Forget screens in both rotations.
+A mobile-width browser preview uses synthetic responses, not a physical radio.
+Actual phone captive opening, successful/wrong-password provisioning, reconnect,
+Forget, expiration, remote settings persistence and RF/memory behavior require
+on-device acceptance. Build identity and observed device results follow below.
+
+Validation, 2026-10-29: Build PASS and Host tests PASS through the complete gate.
+Finite LVGL previews PASS (peak pool 25440 bytes, final free 10464 bytes).
+A 390-pixel browser preview verified no horizontal overflow, Wi-Fi submission,
+90-degree selection and unlimited dim submission against synthetic responses.
+Application size: 1711552 bytes.
+Archive: `build/firmware/17a3c5c6f7e3c16ecb57453319fa756cf3bd846a5f18517569597e864e8b77bf/`.
+Full-image SHA-256: `17a3c5c6f7e3c16ecb57453319fa756cf3bd846a5f18517569597e864e8b77bf`.
+Matching ELF SHA-256: `0ca4ad14e6e903aa67cf220bbe58e7b3e95231b14bc4c38f6abee4d7607c19df`.
+Device tests: PASS for application-only write hash and 12-second startup only.
+Both application and network service reached Ready, with 120936 bytes free heap
+and a 110592-byte largest block; no panic/assert/reset loop was observed.
+Only `0x10000` application data was written; partition table and NVS were not
+reflashed. The serial port was closed. Physical phone/network acceptance above
+remains Unverified. No commit or push was made.
+
+Open-hotspot correction, 2026-10-29: the setup AP now uses `WIFI_AUTH_OPEN`,
+with no generated password or password input when joining. The device displays
+an explicit password-free connection hint. The station Wi-Fi password field
+on the phone page remains necessary for a protected upstream network.
+Build PASS and Host tests PASS through the complete gate; finite LVGL previews
+PASS with verified font coverage. Archive:
+`build/firmware/c7f34acf321dbe965ad25777531b9c767cf01c43a208033b8565ff565962999d/`.
+Full-image SHA-256: `c7f34acf321dbe965ad25777531b9c767cf01c43a208033b8565ff565962999d`.
+Matching ELF SHA-256: `32afe03d033d4ab08bce792f444497ff02bf8e256433599f3fed287e7fb65b38`.
+Only the 1711680-byte application was flashed at `0x10000`, preserving NVS and
+the partition table. Device tests PASS for write verification and 12-second
+startup only: application/network Ready, free heap 120784, largest block 110592,
+no observed panic/assert/reset loop; serial closed. Phone joining and captive
+opening remain Unverified. No commit or push.
+
+Hotspot page access correction: ESP-IDF enables dual-stack HTTP sockets when
+IPv6 is configured. lwIP then reports an IPv4 destination as an IPv4-mapped
+IPv6 sockaddr. The original IPv4-sized address buffer truncated this structure
+and incorrectly returned HTTP 403 for a phone visiting the setup AP. The source
+check now reads sockaddr_storage and recognizes both IPv4 and exact mapped
+IPv6 forms of 192.168.4.1; other LAN/native IPv6 addresses remain rejected.
+Finite host regression checks cover both accepted forms, truncated structures,
+non-AP IPv4/mapped addresses and native IPv6. Physical page access must be
+rechecked after updating; browser mock acceptance did not cover this socket path.
+
+Socket fix validation: Build PASS, Host tests PASS (complete gate). Archive:
+`build/firmware/f0efeb68a1c4f5d7f2aeaad3d758278288e0497aed54b0c9e616d3fca0a0279b/`.
+Full-image SHA-256: `f0efeb68a1c4f5d7f2aeaad3d758278288e0497aed54b0c9e616d3fca0a0279b`.
+Matching ELF SHA-256: `8b80353a1e1ae81aba6676ea534a3733e2fb831e9044022c3c5e7adde211d12d`.
+The verified 1711840-byte application was flashed at `0x10000` only; NVS and
+partition table retained. Device tests PASS for flash hash and 12-second startup
+only; both services reached Ready with no observed panic/assert/reset loop.
+Serial closed. Actual phone HTTP access remains Unverified pending user retest.
+
+## Nearby Wi-Fi selection
+
+The phone page requests one asynchronous scan on opening and offers Rescan.
+The selector lists up to 16 strongest visible networks, with signal strength and
+open/protected labels. Equal SSID/security pairs merge using their strongest
+RSSI. Choosing an entry fills the SSID field and clears any previous password;
+manual input remains available for hidden networks. Network names are rendered
+as text, and JSON encoding escapes special characters. Selecting does not connect
+until the user submits the Wi-Fi form.
+
+The existing worker owns asynchronous scan start/completion, a 15-second deadline
+and driver-result cleanup. Connection/retry or closing the hotspot cancels a
+scan and releases its result list. Scanning is rejected during connection; the
+page allows retry or manual entry. GET `/api/networks` returns the bounded cached
+list; POST `/api/scan` requires the same AP-origin/session checks as other writes.
+No network names or passwords are logged. Tests cover empty/unterminated names,
+strongest-signal deduplication, sorting, capacity and UTF-8 names. Browser checks
+use synthetic scan responses; physical discovery and AP continuity remain
+separate device acceptance checks.
+
+Scan increment validation, 2026-10-29: Build PASS and Host tests PASS through the
+complete gate. Mobile-width browser checks PASS with synthetic responses:
+network listing, selection with Chinese/quotes/angle brackets, SSID fill,
+password focus, rescan and no horizontal overflow.
+Archive: `build/firmware/9fce16d6350d9e1a1ffb9627778093e42ea89b96a59fa1ea33a398a22a7a3442/`.
+Full-image SHA-256: `9fce16d6350d9e1a1ffb9627778093e42ea89b96a59fa1ea33a398a22a7a3442`.
+Matching ELF SHA-256: `76bf2ab3033d337c0cab5d74f90576a73298f0a5c3d0154e6f701b11b15a3af5`.
+Only the 1742720-byte application was flashed at `0x10000`; NVS and partition
+table retained. Device tests PASS for flash verification and 12-second startup
+only: application/network Ready, 120076 bytes free heap, largest block 110592,
+no observed panic/assert/reset loop. Serial closed. Unverified: real RF list,
+scan/connection cancellation and phone hotspot continuity. No commit or push.
+The user confirmed the prior socket fix displays the phone settings page.
+
+## Connection progress and result feedback
+
+The phone now shows a dedicated live result panel next to the Wi-Fi form and
+polls once per second, with one in-flight status request and a five-second
+request timeout. Submission scrolls to the panel and shows Connecting immediately.
+Connecting shows the attempt (one initial plus up to three retries), remaining
+time and DHCP phase. Success displays the escaped SSID, IP and whether the network
+was saved. Failure shows an actionable reason category and allows resubmission.
+Authentication errors suggest checking credentials/router settings rather than
+claiming the password is certainly wrong. Temporary phone disconnection during
+an AP channel change displays Waiting for device result, not a false failure.
+The server provides JSON-escaped SSIDs and a separate network-save error.
+
+The device network page promotes connection state to its main heading: neutral
+progress, green Success, orange Failure, with IP/save result or a short failure
+hint in the content area even while its setup hotspot remains active. It retains
+the hotspot name, URL and countdown. The 14 px application font keeps content
+inside both landscape layouts. Arbitrary SSIDs remain on the phone page because
+the fixed device font cannot represent every possible network name. Connection
+progress and a result transition reset idle blanking so the screen stays visible.
+Obtaining an IP establishes router connectivity, not Internet/cloud reachability.
+
+Before this correction, a bounded serial read observed Station obtained IP
+without a crash; the existing result was too inconspicuous and the phone's
+submission message never changed into a final result. This is not a claim of
+end-to-end acceptance of the new version. Finite previews now cover Connecting,
+DHCP, Success, save failure and authentication failure in both rotations.
+Host checks cover reason categorization, while browser response simulation
+checks the actual submitted-to-success/error UI transitions.
+
+Feedback validation, 2026-10-29: Build PASS and Host tests PASS through the complete
+gate. Finite LVGL preview peak 25440 bytes, final free 10432 bytes. Mobile browser
+simulation verified actual form submission reaches green Success with IP/save
+confirmation, and injected authentication failure shows a retryable reason;
+390-pixel layout had no horizontal overflow.
+Archive: `build/firmware/2fece9ef594bf8e5bb0d867d95e3e20736b6d268d4c32219d0eb1508eb317527/`.
+Full-image SHA-256: `2fece9ef594bf8e5bb0d867d95e3e20736b6d268d4c32219d0eb1508eb317527`.
+Matching ELF SHA-256: `663797803abaf49b5d10e0bc0f51aa7390ce5783f1f80dc963827421b8e867fb`.
+Only the verified 1750112-byte application was flashed at `0x10000`, retaining NVS
+and partition table. Device tests PASS for write hash, 15-second startup and
+saved-network reconnect obtaining an IP at about 3.1 seconds. Network-ready heap
+117884 bytes, largest block 106496 bytes; connected heap 116964 bytes. No observed
+panic/assert/reset loop; serial closed. Unverified: physical new status appearance,
+phone polling on real hotspot, wrong-password recovery and real save failures.
+No commit or push.
+
+## Shared header and device-side Wi-Fi setup
+
+The hall no longer shows a title. A single `ui/app_header` overlay owns the
+module label at the left, current setting/page centered in a contrasting 28 px
+bar, and network/battery status at the right. The hall retains only those status
+indicators with a transparent background. Game, settings, input and placeholder
+pages use the same header; modules supply context text instead of duplicating
+battery/title widgets. The three-bar network symbol is green when connected,
+yellow while connecting, blue for setup hotspot only, grey when offline, and
+adds an orange exclamation mark on failure. It indicates state, not measured RSSI.
+The main owner refreshes the header when the network snapshot changes.
+
+Direction presents both 270-degree/buttons-above and 90-degree/buttons-below
+options as visible rows, with the selected row highlighted. Middle opens editing,
+left/right changes selection, middle confirms and middle hold cancels. Device
+information includes connection state and IP. The network settings summary
+shows state, current SSID and IP.
+
+Entering Network opens an operation list: Select Wi-Fi, Phone hotspot setup,
+Reconnect and Forget. Left/right browse, middle enters/confirms, middle hold
+returns; confirmations preserve left Cancel, middle Confirm, right Back.
+Select Wi-Fi starts a worker scan even with the hotspot disabled. The list
+shows networks plus Manual name and Rescan. Protected networks open the existing
+QWERTY component in masked mode; open networks go directly to confirmation.
+Manual ASCII SSID entry opens the same component before the password editor.
+Scanned UTF-8 SSIDs retain their original bytes, regardless of display fallback.
+Password validation shares the phone protocol limits. Confirm queues a connection
+through the same worker and success-only credential persistence path. Cancel,
+leave and successful submission clear temporary secrets. The component does not
+log input or add its own Wi-Fi task. Application/UI callbacks remain nonblocking.
+
+`network_setup` is an IDF/LVGL-independent workflow with focused host checks for
+scan selection, protected/open paths, manual entry, invalid credentials, cancel,
+confirmation semantics and disposal. Its UI mounts either a short list or the
+keyboard, never both, to fit the existing 32 KB LVGL pool. The existing lab stays
+available and uses unchanged gestures. `network_font_14` adds Flash-resident
+2 bpp ASCII/CJK network-name coverage; unsupported characters display as `?`
+without altering submitted SSIDs. See the paired assets documentation for
+source/license and reproducible generation. Physical key timing, readability,
+new-credential connection and RF continuity still require device acceptance.
+
+Shared-header/device-setup validation, 2026-10-29: Build PASS and Host tests PASS
+through the complete gate. Finite real-LVGL previews cover hall, all settings,
+network menu/list/keyboard, open-network confirmation, Forget and both rotations;
+peak pool 24728 bytes, final free 10928 bytes. The test adapter uses synthetic
+networks; no stress loop is run.
+Archive: `build/firmware/aed9dec557106934696da79f240f11d8ea774e451ed02cdacde6dc1009a83ff5/`.
+Full-image SHA-256: `aed9dec557106934696da79f240f11d8ea774e451ed02cdacde6dc1009a83ff5`.
+Matching ELF SHA-256: `f0ae8886efc07996edbf3a82efe9bf88b5d3087c063dc06925bf11374ef7703a`.
+The verified 2927600-byte application alone was flashed at `0x10000`, preserving
+NVS and partition table. Device tests PASS for write hash, 15-second startup and
+saved Wi-Fi reconnect obtaining an IP at about 3.3 seconds. Network-ready free
+heap 116348 bytes, largest block 106496; connected free heap 115404, largest
+102400. No panic/assert/reset loop observed; serial closed. Unverified: physical
+header/SSID readability, device-side scan/password/confirm flow, actual cancel
+and new-network connection, and coexistence with phone provisioning. No commit
+or push was made.
+
+Network-summary layout correction, 2026-10-29: status, Wi-Fi name and IP now use
+three independent rows, replacing blank-line positioning that overlapped the
+SSID and IP. Network names use the normal text color and long names use a
+single-line trailing ellipsis. Finite LVGL previews cover offline, connected,
+32-byte names, navigation to/from device information and both real rotations;
+peak pool 24728 bytes. Build and Host tests PASS through the complete gate.
+Verified archive: `build/firmware/f4b953422b1c1be6aecbc490f5e1528f69927686fd78809803a4414c7303a8f8/`.
+Full-image SHA-256: `f4b953422b1c1be6aecbc490f5e1528f69927686fd78809803a4414c7303a8f8`.
+Matching ELF SHA-256: `b999c108c05ee26d46d597ff4a53fd99de832c3d3842d7dbe115f1b493c01a78`.
+Device tests PASS for application-only write/hash at `0x10000`, 15-second
+startup and saved-network reconnect obtaining an IP at about 3.4 seconds;
+NVS and partition table preserved, serial closed. No panic/assert/reset loop
+observed. Physical readability remains Unverified. No commit or push.

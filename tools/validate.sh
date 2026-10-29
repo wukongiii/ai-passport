@@ -51,6 +51,13 @@ run_static_checks() {
         tests/test_text_input.c main/input/text_input.c main/ui/app_actions.c -o "${test_dir}/test_text_input"
     "${test_dir}/test_text_input"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_app_network.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_app_network"
+    "${test_dir}/test_app_network"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_network_setup.c main/network/network_setup.c main/network/app_network_model.c \
+        main/input/text_input.c main/ui/app_actions.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_network_setup"
+    "${test_dir}/test_network_setup"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_app_settings.c main/app/app_settings_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_app_settings"
     "${test_dir}/test_app_settings"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/score_stubs -Itests/bsp_stubs \

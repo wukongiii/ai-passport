@@ -98,3 +98,17 @@ PYTHONPATH=build/art-tools python3 tools/generate_launcher_art.py --font build/f
 
 The source is `tools/generate_launcher_art.py`. The firmware and host preview
 compile the generated C once; PNG files are review assets, not runtime decodes.
+
+### Network-name font
+
+`fonts/network_font_14.c` uses the same pinned Noto CJK source and OFL license
+as the scoreboard font. It includes printable ASCII, CJK unified ideographs
+U+4E00..U+9FFF, CJK punctuation and fullwidth ASCII at 14 px / 2 bpp. This is a
+separate Flash-resident font for dynamic Wi-Fi names; fixed UI strings retain
+the smaller verified application font. Unsupported code points are replaced
+with `?` for display only, preserving original SSID bytes when connecting.
+No full glyph atlas is allocated in RAM. Regenerate with:
+
+```bash
+python3 tools/generate_network_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
+```

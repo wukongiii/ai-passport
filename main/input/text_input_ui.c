@@ -64,7 +64,7 @@ void text_input_ui_create(text_input_ui_t *u,lv_obj_t *parent,const lv_font_t *f
 }
 void text_input_ui_render(text_input_ui_t *u,const text_input_t *t,uint64_t now,int height){
     // Physical key count does not limit the number of visible candidates.
-    const int top=24,inset=12,width=296,available=height-top;
+    const int top=28,inset=12,width=296,available=height-top;
     char buffer[48];
     const lv_font_t *font=lv_obj_get_style_text_font(u->text,0);
     unsigned capacity=sizeof(buffer);

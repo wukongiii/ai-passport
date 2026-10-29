@@ -8,6 +8,7 @@
 #include "app/app_ui.h"
 #include "score/score_input.h"
 #include "app/app_settings.h"
+#include "network/app_network.h"
 #include "esp_app_desc.h"
 #include "score/score_strings.h"
 #include "esp_heap_caps.h"
@@ -80,10 +81,14 @@ void app_main(void) {
     int battery = battery_ready ? bsp_battery_soc() : -1;
     int millivolts = battery_ready ? bsp_battery_mv() : -1;
     app_settings_device_info(battery,millivolts,esp_app_get_description()->version);
+    app_network_publish_preferences(app_settings_preferences());
+    app_network_init();
     int64_t last_battery = esp_timer_get_time();
     int64_t last_input = last_battery;
     bool blanked = false;
     score_input_guard_t wake_guard = {0};
+    app_net_state_t last_network_state=APP_NET_OFFLINE;
+    unsigned network_revision=0;
     uint8_t brightness = app_settings_preferences()->brightness;
     if (bsp_lvgl_lock(500)) {
         app_ui_render(&s_app, battery, "");
@@ -124,8 +129,12 @@ void app_main(void) {
             }
         } else render = false;
         const int64_t now = esp_timer_get_time();
+        const app_rotation_t before_network=s_app.rotation;
         // Inactive games still get persistence retries, outside the UI lock.
         if (app_container_tick(&s_app, now)) render = true;
+        if(s_app.rotation==before_network && before_network!=app_settings_preferences()->rotation){
+            s_app.rotation=app_settings_preferences()->rotation;render=true;
+        }
         if (now - last_battery >= 30000000) {
             battery = battery_ready ? bsp_battery_soc() : -1;
             millivolts = battery_ready ? bsp_battery_mv() : -1;
@@ -133,6 +142,13 @@ void app_main(void) {
             last_battery = now;
             render = true;
         }
+        app_network_snapshot_t network;app_network_snapshot(&network);
+        if(network.revision!=network_revision){render=true;network_revision=network.revision;}
+        // Phone-triggered connection progress is visible even after idle blanking.
+        if(network.busy || network.state!=last_network_state){
+            last_input=now;blanked=false;render=true;
+        }
+        last_network_state=network.state;
         // Backlight-only idle policy: full system sleep remains a later feature.
         const int64_t idle = now - last_input;
         app_preferences_t display_preferences=*app_settings_preferences();
