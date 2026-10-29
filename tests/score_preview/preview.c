@@ -14,6 +14,7 @@
 #include "app/app_preferences_store.h"
 #include "app/app_strings.h"
 #include "games/eight_module.h"
+#include "games/game_preferences.h"
 #include "score/score_store.h"
 #include "bsp_display_rounding.h"
 #include <assert.h>
@@ -47,6 +48,8 @@ void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_preview;}
 static ai_config_snapshot_t ai_preview={.ready=true,.active=AI_PROVIDER_NONE};
 void ai_config_snapshot(ai_config_snapshot_t *out){*out=ai_preview;}
 bool ai_config_submit(const ai_config_request_t *r,unsigned *id){(void)id;ai_preview.active=r->provider;ai_preview.revision++;return true;}
+static game_preferences_snapshot_t game_names={.ready=true,.revision=1};
+void game_preferences_snapshot(game_preferences_snapshot_t *out){*out=game_names;}
 static unsigned char frame[320*240*3];
 static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *data) {
     const uint16_t *p=(const uint16_t *)data;
@@ -67,6 +70,7 @@ static void advance(unsigned ms) {
     for (unsigned t=0; t<ms; t+=20) { lv_tick_inc(20); lv_timer_handler(); }
 }
 int main(void) {
+    game_preferences_default(&game_names.eight);
     lv_init();lv_display_t *d=lv_display_create(240,320);
     static uint16_t draw[320*40];
     lv_display_set_buffers(d,draw,NULL,sizeof(draw),LV_DISPLAY_RENDER_MODE_PARTIAL);
@@ -88,10 +92,25 @@ int main(void) {
             app_bindings_t b; score_controller_bindings(&ui, &s, &b);
             app_shell_render(&game_shell, ui.rotation, &b);
             score_ui_render(&s,&ui,app_content_rect(ui.rotation,app_binding_rows(&b)).height,
-                            85,TXT_RESTORED,TXT_SAVING_FAILED);
+                            85,TXT_RESTORED,TXT_SAVING_FAILED,&game_names.eight,false,0,0);
             app_header_render(app_content_rect(ui.rotation,app_binding_rows(&b)).y,TXT_APP_EIGHT,85,false);
             char name[64]; snprintf(name,sizeof(name),"page-%u-%s",page,suffix); capture(name);
         }
+    }
+    // Long Chinese names use the existing broad font in both landscape layouts.
+    snprintf(game_names.eight.players[0],GAME_PLAYER_NAME_CAPACITY,"一二三四五六七八");
+    snprintf(game_names.eight.players[1],GAME_PLAYER_NAME_CAPACITY,"张三");
+    extern const lv_font_t network_font_14;
+    for(uint32_t cp=0x4e00;cp<=0x9fef;++cp){lv_font_glyph_dsc_t glyph={0};assert(lv_font_get_glyph_dsc(&network_font_14,&glyph,cp,0)&&!glyph.is_placeholder);}
+    for(unsigned r=0;r<2;++r){
+        ui.page=SCORE_PAGE_BOARD;ui.rotation=r?APP_ROTATION_90:APP_ROTATION_270;
+        app_bindings_t b;score_controller_bindings(&ui,&s,&b);app_shell_render(&game_shell,ui.rotation,&b);
+        score_ui_render(&s,&ui,192,85,TXT_RESTORED,"",&game_names.eight,true,0,1);
+        app_header_render(app_content_rect(ui.rotation,app_binding_rows(&b)).y,TXT_APP_EIGHT,85,false);
+        capture(r?"named-eight-90":"named-eight-270");
+        s.state.points[1]=s.state.target;
+        score_ui_render(&s,&ui,192,85,TXT_RESTORED,"",&game_names.eight,false,0,0);
+        capture(r?"named-winner-90":"named-winner-270");s.state.points[1]=9;
     }
     // Exercise all nine shared-shell labels with a synthetic future module.
     lv_obj_t *old = lv_screen_active();
@@ -134,8 +153,8 @@ int main(void) {
         app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");capture(r ? "ai-saved-90" : "ai-saved-270");
         app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
-        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-openai-qr-90" : "ai-openai-qr-270");
-        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-openai-placeholder-90" : "ai-openai-placeholder-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r ? "voice-ready-90" : "voice-ready-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);assert(speech_preview.state==SPEECH_WAITING);

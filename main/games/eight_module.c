@@ -1,4 +1,5 @@
 #include "eight_module.h"
+#include "game_preferences.h"
 #include "../app/app_strings.h"
 #include "../score/score_controller.h"
 #include "../score/score_store.h"
@@ -11,6 +12,10 @@ static struct {
     bool loaded, dirty, preserve_unknown;
     int64_t last_save;
     const char *status, *storage;
+    game_eight_preferences_t preferences;
+    unsigned preferences_revision, player;
+    int delta;
+    bool player_status;
 } state;
 
 /* Storage bootstrap runs once outside the LVGL lock. The old NVS namespace and
@@ -18,6 +23,7 @@ static struct {
 void eight_module_init(void) {
     if (state.loaded) return;
     score_session_init(&state.session);
+    game_preferences_default(&state.preferences);
     const score_store_status_t store = score_store_open(&state.session);
     state.preserve_unknown = store == SCORE_STORE_INVALID || store == SCORE_STORE_UNAVAILABLE;
     state.storage = store == SCORE_STORE_UNAVAILABLE ? TXT_STORE_FAILED :
@@ -53,6 +59,8 @@ static app_module_effect_t input(void *context, app_rotation_t rotation,
             c.type == SCORE_CMD_UNDO ? TXT_UNDONE : c.type == SCORE_CMD_NEW_MATCH ? TXT_NEW_STARTED :
             c.amount < 0 ? (c.player ? TXT_SUBBED_TWO : TXT_SUBBED_ONE) :
             (c.player ? TXT_AWARDED_TWO : TXT_AWARDED_ONE);
+        state.player_status = result == SCORE_OK && c.type == SCORE_CMD_ADJUST_POINTS;
+        state.player = c.player; state.delta = c.amount;
         if (result == SCORE_OK) {
             if (c.type == SCORE_CMD_NEW_MATCH) state.preserve_unknown = false;
             state.dirty = true;
@@ -63,13 +71,16 @@ static app_module_effect_t input(void *context, app_rotation_t rotation,
 }
 static bool tick(void *context, int64_t now) {
     (void)context;
+    game_preferences_snapshot_t preferences;game_preferences_snapshot(&preferences);
+    bool changed = preferences.revision != state.preferences_revision;
+    if(changed){state.preferences=preferences.eight;state.preferences_revision=preferences.revision;}
     if (state.dirty && !state.preserve_unknown && (!state.last_save || now - state.last_save >= 5000000)) {
         state.last_save = now;
         state.dirty = score_store_save(&state.session) != ESP_OK;
         state.storage = state.dirty ? TXT_SAVING_FAILED : TXT_SAVED;
         return true;
     }
-    return false;
+    return changed;
 }
 static bool ui_create(void *context, void *content) {
     (void)context;
@@ -77,11 +88,10 @@ static bool ui_create(void *context, void *content) {
 }
 static void ui_render(void *context, const app_module_view_t *view) {
     (void)context;
-    const int winner = score_winner(&state.session.state);
-    const char *message = winner < 0 ? state.status : winner ? TXT_WINNER_TWO : TXT_WINNER_ONE;
     state.controller.rotation = view->rotation;
     score_ui_render(&state.session, &state.controller, view->content_height,
-        view->battery, message, view->storage_overlay && *view->storage_overlay ? view->storage_overlay : state.storage);
+        view->battery, state.status, view->storage_overlay && *view->storage_overlay ? view->storage_overlay : state.storage,
+        &state.preferences, state.player_status, state.player, state.delta);
 }
 static void init(void *context) { (void)context; eight_module_init(); }
 static const app_module_ops_t ops = {enter, leave, bindings, input, tick, ui_create, ui_render, init, NULL};

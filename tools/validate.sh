@@ -64,6 +64,12 @@ run_static_checks() {
         tests/test_ai_config_store.c main/ai/ai_config_store.c main/ai/ai_config.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_ai_config_store"
     "${test_dir}/test_ai_config_store"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_game_preferences.c main/games/game_preferences.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_game_preferences"
+    "${test_dir}/test_game_preferences"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/speech_stubs -Itests/score_stubs -Itests/bsp_stubs \
+        tests/test_game_preferences_store.c main/games/game_preferences_store.c main/games/game_preferences.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_game_preferences_store"
+    "${test_dir}/test_game_preferences_store"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_app_network.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_app_network"
     "${test_dir}/test_app_network"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
@@ -81,6 +87,7 @@ run_static_checks() {
     "${test_dir}/test_app_carousel_layout"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/bsp_stubs \
         tests/test_eight_module.c main/games/eight_module.c main/score/score.c \
+        main/games/game_preferences.c main/network/app_network_model.c main/app/app_preferences.c \
         main/score/score_config.c main/score/chinese_eight.c main/score/score_controller.c \
         main/ui/app_actions.c main/ui/app_layout.c -o "${test_dir}/test_eight_module"
     "${test_dir}/test_eight_module"

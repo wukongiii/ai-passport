@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 LV_FONT_DECLARE(score_font_16);
+LV_FONT_DECLARE(network_font_14);
 
 #define BG 0x101C25
 #define SURFACE 0x1C2D38
@@ -16,7 +17,7 @@ LV_FONT_DECLARE(score_font_16);
 #define BLUE 0x74C5D9
 
 static lv_obj_t *s_screen, *s_board, *s_dialog, *s_status, *s_storage;
-static lv_obj_t *s_cards[2], *s_points[2], *s_menu_rows[2];
+static lv_obj_t *s_cards[2], *s_names[2], *s_points[2], *s_menu_rows[2];
 static lv_obj_t *s_title, *s_detail, *s_target_hint;
 static app_range_t s_target_range;
 
@@ -67,8 +68,8 @@ bool score_ui_create(void *content) {
     lv_obj_set_style_border_width(s_board, 0, 0);
     for (unsigned i = 0; i < 2; ++i) {
         s_cards[i] = panel(s_board, i == 0 ? 16 : 174, 4, 130, 88);
-        label(s_cards[i], 8, 3, 114, i == 0 ? TXT_PLAYER_ONE : TXT_PLAYER_TWO,
-                           &score_font_16, i == 0 ? GOLD : BLUE);
+        s_names[i] = label(s_cards[i], 8, 3, 114, i == 0 ? TXT_PLAYER_ONE : TXT_PLAYER_TWO,
+                           &network_font_14, i == 0 ? GOLD : BLUE);
         s_points[i] = label(s_cards[i], 5, 23, 120, "0", &lv_font_montserrat_48, INK);
     }
     label(s_board, 145, 30, 30, ":", &lv_font_montserrat_32, MUTED);
@@ -88,7 +89,8 @@ bool score_ui_create(void *content) {
 }
 
 void score_ui_render(const score_session_t *s, const score_controller_t *ui,
-                     int height, int battery, const char *status, const char *storage) {
+                     int height, int battery, const char *status, const char *storage,
+                     const game_eight_preferences_t *preferences, bool player_status, unsigned player, int delta) {
     lv_obj_set_height(s_board, height - 68);
     for (unsigned i = 0; i < 2; ++i) {
         lv_obj_set_height(s_cards[i], height - 76);
@@ -97,7 +99,11 @@ void score_ui_render(const score_session_t *s, const score_controller_t *ui,
     lv_obj_set_y(s_status, height - 36);
     lv_obj_set_y(s_storage, height - 17);
     (void)battery;
-    lv_label_set_text(s_status, status);
+    int winner = score_winner(&s->state);
+    lv_obj_set_style_text_font(s_status, winner >= 0 || player_status ? &network_font_14 : &score_font_16, 0);
+    if(winner >= 0) lv_label_set_text_fmt(s_status, TXT_PLAYER_WON, preferences->players[winner]);
+    else if(player_status) lv_label_set_text_fmt(s_status, "%s %s", preferences->players[player], delta < 0 ? "-1" : "+1");
+    else lv_label_set_text(s_status, status);
     lv_label_set_text(s_storage, storage);
     const bool board = ui->page == SCORE_PAGE_BOARD;
     if (board) {
@@ -122,6 +128,7 @@ void score_ui_render(const score_session_t *s, const score_controller_t *ui,
     lv_label_set_text(s_target_hint, "");
     if (board) {
         for (unsigned i = 0; i < 2; ++i) {
+            lv_label_set_text(s_names[i], preferences->players[i]);
             lv_label_set_text_fmt(s_points[i], "%ld", (long)s->state.points[i]);
             selected(s_cards[i], true, i == 0 ? GOLD : BLUE);
         }

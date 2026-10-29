@@ -778,3 +778,85 @@ free heap 98156, largest block 86016; no panic/assert/reset loop. NVS and partit
 table were preserved, serial closed. Unverified: physical buttons/layout,
 phone-camera scanning and real-hotspot save/restart acceptance. No model API
 call or Key validity test was made. No commit or push.
+
+## Per-game phone configuration
+
+The existing hotspot portal has a separate Game settings section, with a game
+selector. Chinese eight-ball exposes left/right player names; chase and snooker
+show explicit unavailable placeholders and cannot submit configuration.
+Names default to the existing player A/B labels. Both names are saved atomically
+in a version-1 record (`GP`, version byte, reserved byte, two 25-byte UTF-8 names)
+under the independent `game_prefs/eight` NVS key. The match schema, scores,
+target and undo history are unchanged, including when a new match starts.
+
+`main/games/game_preferences` separates the game descriptors, validation and
+form parser from the ESP-IDF storage adapter. Stable player slots remain the
+identity; a name is a display label and a future voice alias. Names must be
+distinct (ASCII case-insensitive), 1–8 characters, and fit the existing
+`network_font_14`: printable ASCII, CJK U+4E00–U+9FEF, CJK punctuation
+U+3000–U+303F and fullwidth punctuation U+FF01–U+FF60. Leading/trailing ASCII
+and ideographic spaces are trimmed. Unsupported Unicode and malformed UTF-8
+are rejected rather than hidden or replaced. No additional font is embedded.
+
+`GET/POST /api/games` uses the same AP-only authorization as the other setup
+APIs. The HTTP task queues one bounded update; the network worker performs NVS
+writes and reports completion. The page reports success only after commit,
+retains drafts on failures/polling, and requires reload on a stale configuration
+revision. Read failures retain the stored record and use defaults until the user
+explicitly saves a replacement. The game owner consumes a copied snapshot and
+refreshes its view without HTTP touching LVGL or match state. Names appear on
+score cards, score feedback and winner messages using the broad 14px font;
+left/right action hints use +1/-1, preserving the physical button semantics.
+
+Acceptance includes bounded host tests for name validation, duplicate fields,
+stale/busy updates, NVS restart and write/commit/read failures; real-LVGL renders
+at both rotations; and browser interaction against a simulated HTTP adapter.
+Physical hotspot persistence and board rendering remain unverified until the
+user resumes device testing. This increment must not be flashed while the user
+has postponed board testing.
+
+Validation, 2026-10-29: complete gate Build PASS, Host tests PASS. Browser checks
+at mobile and desktop sizes covered save feedback, placeholders, validation,
+draft retention on disconnection/save failure, and stale-revision reload against
+a simulated HTTP adapter. Both real-LVGL landscape previews passed; peak usage
+was 24792 bytes in the 32 KB pool. Device tests NOT RUN, as requested.
+Verified archive/full SHA-256:
+`build/firmware/266b69fe55864a72c2f688767f635100802251174c8ba8acf0e45e39db803920/`.
+Matching ELF SHA-256: `7cbb0794de6194f6590f256a629a60d1f3bfdd195e36ae04471a40b0ea3b8bd8`.
+
+
+## Doubao Ark configuration
+
+The model configuration entry enables Doubao Ark only. OpenAI remains a visible
+placeholder in both the phone portal and device list; its configuration actions
+are blocked in the UI and API. The phone form accepts an Ark API Key and Model ID
+or Endpoint ID. The editable default is `doubao-seed-2-0-mini-260428`. Leaving the
+Key empty retains the saved Key while updating the model. Public snapshots expose
+saved flags and model identifiers, never credentials. Onboarding links and the
+device account QR open the official Ark console.
+
+Standalone speech recognition configuration and functionality are removed. There
+is no speech service selector, Key input, saved flag or service request branch.
+Old service-qualified forms are rejected to prevent a cached page from overwriting
+the Ark Key. Offline speech synthesis and the listening test remain available.
+Remote model calls and score command execution are still pending.
+
+Version 3 of `ai_voice/models` stores stable provider Key slots followed by the
+Ark model identifier. Version-1 reads discard the retired speech Key; version-2
+reads retain the Ark Key/model and discard the separate speech Key. Other provider
+slots remain preserved but unavailable. Reads do not rewrite NVS; an explicit
+save writes version 3, omitting retired credentials. Failed writes/commits retain
+the active configuration. Existing match data and per-game names are unaffected.
+
+
+Validation, 2026-10-30: complete gate Build PASS, Host tests PASS. Tests cover
+Ark-only form handling, retired request rejection, v1/v2 migration, v3 reload,
+model-only updates and durable write failures. Mobile browser checks against a
+simulated HTTP adapter passed save/reload/model updates and placeholder behavior,
+and confirmed the standalone speech service controls are absent. Both landscape
+LVGL previews passed, including the retained offline listening page (24792-byte
+peak in the 32 KB pool). Device tests NOT RUN, as requested. Unverified: real
+hotspot save/restart, on-board rendering and remote model connectivity.
+Verified archive/full SHA-256:
+`build/firmware/73613efed398d27bf0eee8468ae37a05b6e2de3a87114eb9ea5226de26993ce8/`.
+Matching ELF SHA-256: `b51a4246517ca0a0bcfc4bba44352c0c4d44bb863d8f917b2206a8b3cd96c9b6`.

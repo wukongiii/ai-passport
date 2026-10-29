@@ -8,16 +8,21 @@
 static score_session_t disk;
 static unsigned reads, saves, creates, renders;
 static bool fail_save;
+static game_preferences_snapshot_t names={.revision=1};
+void game_preferences_snapshot(game_preferences_snapshot_t *out) { *out=names; }
 score_store_status_t score_store_open(score_session_t *s) { ++reads; *s = disk; return SCORE_STORE_LOADED; }
 esp_err_t score_store_save(const score_session_t *s) {
     ++saves; if (fail_save) return ESP_FAIL; disk = *s; return ESP_OK;
 }
 bool score_ui_create(void *content) { assert(content); ++creates; return true; }
 void score_ui_render(const score_session_t *s, const score_controller_t *ui,
-                     int height, int battery, const char *status, const char *storage) {
+                     int height, int battery, const char *status, const char *storage,
+                     const game_eight_preferences_t *p, bool player_status, unsigned player, int delta) {
     assert(s && ui && height == 192 && battery == 85 && status && storage); ++renders;
+    assert(!strcmp(p->players[0],"张三") && player_status && player==0 && delta==-1);
 }
 int main(void) {
+    game_preferences_default(&names.eight);
     score_session_init(&disk); disk.state.target = 5; disk.state.points[0] = 2;
     eight_module_init(); eight_module_init(); assert(reads == 1);
     const app_module_t *m = &app_module_eight;
@@ -36,6 +41,11 @@ int main(void) {
     assert(disk.state.points[0] == 2 && disk.history_count == 2);
     assert(m->ops->ui_create(m->context, &disk));
     const app_module_view_t view = {APP_ROTATION_90, 192, 85, ""};
+    strcpy(names.eight.players[0],"张三");++names.revision;
+    assert(m->ops->tick(m->context,5000300));
+    // Renaming preserves score/history and updates live views.
+    assert(disk.state.points[0]==2 && disk.history_count==2);
+    m->ops->input(m->context, APP_ROTATION_90, 1, APP_GESTURE_SHORT);
     m->ops->ui_render(m->context, &view);
     assert(creates == 1 && renders == 1 && reads == 1);
     puts("Eight-ball adapter re-entry, legacy restore, inactive save retry and view: PASS");

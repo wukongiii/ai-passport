@@ -42,10 +42,12 @@ static void bindings(void *c,app_bindings_t *b){
         app_actions_register(b,0,APP_GESTURE_SHORT,504,TXT_VOICE_CHANGE,true,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_SHORT,505,TXT_VOICE_PLAY,true,APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,506,TXT_VOICE_STOP,true,APP_ACTION_CANCEL);
-    }else if(state.page==PROVIDER){
+    }else if(state.page==PROVIDER && ai_provider(state.provider)->available){
         app_actions_register(b,0,APP_GESTURE_SHORT,507,TXT_AI_SIGNUP,true,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_SHORT,508,TXT_AI_PHONE,true,APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,509,TXT_AI_APPLY,state.config.configured[state.provider] && !state.config.busy,APP_ACTION_CONFIRM);
+    }else if(state.page==PROVIDER){
+        /* Placeholder keeps only the common long-press Back action. */
     }else if(state.page==SIGNUP){
         app_actions_register(b,1,APP_GESTURE_SHORT,508,TXT_AI_PHONE,true,APP_ACTION_CONFIRM);
     }else{
@@ -74,6 +76,7 @@ static app_module_effect_t input(void *c,app_rotation_t r,unsigned slot,app_gest
             else{state.provider=state.focus;state.page=PROVIDER;}
             break;
         case PROVIDER:
+            if(!ai_provider(state.provider)->available)break;
             if(slot==0)state.page=SIGNUP;
             else if(slot==1)phone();
             else {ai_config_request_t request={.action=AI_CONFIG_SELECT,.provider=state.provider};state.rejected=!ai_config_submit(&request,NULL);}
@@ -124,6 +127,7 @@ static void mount(void){
     note=label(content,12,170,296,0xA6B5B7);
 }
 static const char *config_status(unsigned i){
+    if(!ai_provider(i)->available)return TXT_APP_MOCK;
     return !state.config.configured[i] ? TXT_AI_NONE : state.config.active==i ? TXT_AI_ACTIVE : TXT_AI_SAVED;
 }
 static void code(const char *value){
@@ -137,7 +141,7 @@ static void render(void *c,const app_module_view_t *v){
     lv_obj_set_y(note,v->content_height-20);lv_label_set_text(note,"");
     if(state.page==MODELS){
         app_header_context(TXT_AI_MODELS);
-        if(state.config.active<AI_PROVIDER_COUNT)lv_label_set_text_fmt(detail,TXT_AI_CURRENT,ai_provider(state.config.active)->name);
+        if(state.config.active<AI_PROVIDER_COUNT && ai_provider(state.config.active)->available)lv_label_set_text_fmt(detail,TXT_AI_CURRENT,ai_provider(state.config.active)->name);
         else lv_label_set_text(detail,TXT_AI_EMPTY);
         for(unsigned i=0;i<3;++i){
             if(i<AI_PROVIDER_COUNT)lv_label_set_text_fmt(rows[i],"%s  ·  %s",ai_provider(i)->name,config_status(i));
@@ -157,8 +161,8 @@ static void render(void *c,const app_module_view_t *v){
     const ai_provider_t *p=ai_provider(state.provider);app_header_context(p->name);
     if(state.page==PROVIDER){
         lv_label_set_text_fmt(detail,"%s · %s",p->model,config_status(state.provider));
-        lv_label_set_text(qr_text,TXT_AI_FILL);
-        lv_label_set_text(note,state.config.configured[state.provider] ? TXT_AI_PENDING : TXT_AI_EMPTY);
+        lv_label_set_text(qr_text,p->available ? TXT_AI_FILL : TXT_APP_MOCK);
+        lv_label_set_text(note,p->available ? (state.config.configured[state.provider] ? TXT_AI_PENDING : TXT_AI_EMPTY) : "");
     }else if(state.page==SIGNUP){
         lv_label_set_text(qr_text,TXT_AI_SCAN);lv_label_set_text(detail,p->model);lv_label_set_text(note,TXT_AI_FILL);code(p->signup_url);
     }else{

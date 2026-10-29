@@ -25,6 +25,8 @@ idf_component_register(
          "app/app_carousel_layout.c"
          "../assets/images/launcher/launcher_art.c"
          "games/eight_module.c"
+         "games/game_preferences.c"
+         "games/game_preferences_store.c"
          "score/score.c"
          "score/score_config.c"
          "score/chinese_eight.c"

@@ -2,9 +2,17 @@
 <style>*{box-sizing:border-box}body{margin:0;background:#101c25;color:#f2f3e9;font:16px system-ui;line-height:1.6}main{max-width:560px;margin:auto;padding:20px}h1{font-size:24px;margin:6px 0}section{background:#1c303b;border-radius:16px;padding:18px;margin:16px 0}label{display:block;margin:12px 0 4px}input,select,button{width:100%;font:inherit;border-radius:9px;padding:10px;border:1px solid #536775;color:inherit;background:#101c25}input[type=range]{padding:6px 0;accent-color:#74c5b5}button{background:#246b4e;margin-top:16px;border:0;font-weight:600}button:disabled{opacity:.5}.ends{display:flex;justify-content:space-between;font-size:13px;color:#aac0c4}output{display:block;text-align:center;color:#8de0b8;font-size:22px}.muted{color:#aac0c4;font-size:14px}#message{white-space:pre-wrap;color:#edc56b}a{color:#8de0b8}.connection{padding:14px;border-radius:10px;border-left:4px solid #aac0c4;background:#101c25;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}.connection[data-state="1"]{border-color:#edc56b;color:#edc56b}.connection[data-state="2"]{border-color:#8de0b8;color:#8de0b8}.connection[data-state="3"]{border-color:#ed9a76;color:#ed9a76}</style>
 <main><h1>台球记分 · 设置</h1><div class="muted">直接在手机上设置，无需安装应用。设备热点无需密码，为临时连接。</div><p id="status">正在读取设备状态…</p><div id="message" role="status"></div>
 <section><h2>连接 Wi-Fi</h2><div id="connection" class="connection" role="status" aria-live="polite">正在读取连接状态…</div><p class="muted">请选择附近的 2.4 GHz 网络，或手动填写名称。连接期间请保留此热点连接；即使手机提示“无法上网”，也请选择继续连接。</p><label for="networks">附近 Wi-Fi</label><select id="networks"><option value="">正在读取网络列表…</option></select><button id="scan" type="button">重新扫描</button><p id="scanStatus" class="muted" role="status"></p><form id="wifi"><label for="ssid">Wi-Fi 名称（SSID）</label><input id="ssid" name="ssid" autocomplete="off" required maxlength="32"><label for="password">Wi-Fi 密码</label><input id="password" name="password" type="password" autocomplete="new-password" maxlength="64"><p class="muted">开放网络可留空；其他网络输入 8–63 个 ASCII 字符，或 64 位十六进制密钥。</p><button id="connect">连接并保存</button></form></section>
-<section id="ai"><h2>AI / 语音 · 模型配置</h2><p class="muted">分别保存各平台的 API Key，再选择当前使用的模型。本次仅保存配置，语音识别和模型调用尚未接入。</p>
-<form id="aiForm"><label for="aiProvider">模型平台</label><select id="aiProvider"></select><p id="aiModel" class="muted"></p><p><a id="aiSignup" target="_blank" rel="noopener noreferrer">注册 / 登录，申请 API Key ↗</a></p><p class="muted">申请 Key 时需要互联网；若热点无法上网，请暂时切换手机网络，申请后再连回设备热点。</p>
-<div id="aiState" class="connection" role="status" aria-live="polite">正在读取模型配置…</div><label for="aiKey">API Key</label><input id="aiKey" name="key" type="password" autocomplete="new-password" maxlength="256" spellcheck="false" placeholder="粘贴该平台的 API Key"><p class="muted">Key 不会回显。保存新 Key 会替换该平台原有 Key，并设为当前模型。</p><button id="aiSave">保存并设为当前</button></form><button id="aiSelect" type="button">使用已保存的配置</button><button id="aiRemove" type="button" style="background:#854a3d">删除该模型配置</button><p id="aiMessage" role="status" aria-live="polite"></p></section>
+<section id="games"><h2>玩法配置</h2><p class="muted">按玩法分别设置。名字保存后会更新设备显示，不改变当前比分和撤销记录。</p>
+<label for="gameSelect">选择玩法</label><select id="gameSelect" disabled><option>正在读取玩法…</option></select>
+<form id="gameForm" hidden><h3>中八 · 选手名字</h3><label for="player1">左侧选手</label><input id="player1" name="player1" required maxlength="8" autocomplete="off" spellcheck="false" disabled><label for="player2">右侧选手</label><input id="player2" name="player2" required maxlength="8" autocomplete="off" spellcheck="false" disabled><p class="muted">每人 1–8 个字符，支持汉字、英文字母、数字和常用标点。前后空格会去除，两人名字不能相同；暂不支持表情、生僻扩展汉字和其他语言字母。</p><button id="gameSave" disabled>保存中八配置</button></form>
+<p id="gamePlaceholder" class="muted" hidden>此玩法配置即将开放。</p><button id="gameReload" type="button" disabled>重新读取已保存配置</button><div id="gameMessage" class="connection" role="status" aria-live="polite">正在读取玩法配置…</div></section>
+<section id="ai"><h2>AI / 语音 · 模型配置</h2><p class="muted">配置豆包方舟 API Key 和模型，其他平台暂时占位。这里只保存配置，设备端 AI 指令调用尚未接入。</p>
+<label for="aiProvider">模型平台</label><select id="aiProvider"></select><p id="aiPlaceholder" class="muted" hidden>此模型暂未开放配置，已有配置会保留。</p>
+<div id="aiControls">
+<p id="aiModel" class="muted"></p><p><a id="aiSignup" target="_blank" rel="noopener noreferrer">注册 / 登录，申请 API Key ↗</a></p><p class="muted">申请 Key 需要互联网；若热点无法上网，请暂时切换手机网络，申请后再连回设备热点。请使用方舟 API Key。</p>
+<div id="aiState" class="connection" role="status" aria-live="polite">正在读取模型配置…</div>
+<form id="aiForm"><div id="aiModelField"><label for="aiModelId">方舟 Model ID / Endpoint ID</label><input id="aiModelId" name="model" maxlength="96" autocomplete="off" spellcheck="false" placeholder="doubao-seed-2-0-mini-260428"><p class="muted">填写已开通的模型 ID，或 ep- 开头的推理接入点 ID。可修改默认值。</p></div>
+<label id="aiKeyLabel" for="aiKey">方舟 API Key</label><input id="aiKey" name="key" type="password" autocomplete="new-password" maxlength="256" spellcheck="false" placeholder="粘贴对应服务的 API Key"><p id="aiKeyNote" class="muted"></p><button id="aiSave">保存并设为当前</button></form><button id="aiSelect" type="button">使用已保存的豆包配置</button><button id="aiRemove" type="button" style="background:#854a3d">删除豆包配置</button></div><p id="aiMessage" role="status" aria-live="polite"></p></section>
 <section><h2>显示设置</h2><form id="display"><label for="rotation">屏幕方向</label><select id="rotation" name="rotation"><option value="270">270° · 按键在上</option><option value="90">90° · 按键在下</option></select>
 <label for="brightness">亮度</label><output id="brightnessValue"></output><input id="brightness" type="range" min="20" max="100" step="10" name="brightness"><div class="ends"><span>20%</span><span>100%</span></div>
 <label for="dim">自动变暗</label><output id="dimValue"></output><input id="dim" type="range" min="0" max="4" step="1"><div class="ends"><span>15 秒</span><span>无限制</span></div>
@@ -24,7 +32,7 @@ else text='尚未连接 Wi-Fi，请选择网络并输入密码。';
 $('connection').dataset.state=s.state;$('connection').textContent=text;$('connect').disabled=pending||connecting;$('connect').textContent=connecting?'正在连接…':'连接并保存';
 }
 async function refresh(){if(statusPolling)return;statusPolling=true;try{let r=await fetch('/api/status',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();let s=await r.json();token=s.token;if(!scanStarted){scanStarted=true;startScan();}connectionState(s);$('status').textContent='热点剩余 '+s.seconds+' 秒 · 连接结果见下方';if(!loaded){let f=$('display');f.elements.rotation.value=s.rotation;$('brightness').value=s.brightness;$('dim').value=dims.indexOf(s.dim);$('blank').value=blanks.indexOf(s.blank);values();loaded=true;}}catch(e){$('status').textContent='暂时无法连接设备。请检查是否仍连接设备热点，或重新开启热点。';if(connecting){$('connection').dataset.state=1;$('connection').textContent='正在等待设备连接结果…\n手机可能随路由器切换了热点信道，请保留设备热点连接。暂时失联不代表连接失败，设备屏幕也会显示结果。';}}finally{statusPolling=false;}}
-async function send(path,body){if(pending||!token){$('message').textContent='正在连接设备，请稍后重试。';return false;}pending=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{let r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body});if(!r.ok)throw Error(await r.text());$('message').textContent=path.includes('wifi')?'设备已收到连接请求，结果会在上方实时更新。':'已提交，设备正在应用显示设置。';return true;}catch(e){$('message').textContent='未能提交：'+e.message;return false;}finally{pending=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);$('connect').disabled=connecting;aiRender();}}
+async function send(path,body){if(pending||!token){$('message').textContent='正在连接设备，请稍后重试。';return false;}pending=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{let r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body});if(!r.ok)throw Error(await r.text());$('message').textContent=path.includes('wifi')?'设备已收到连接请求，结果会在上方实时更新。':'已提交，设备正在应用显示设置。';return true;}catch(e){$('message').textContent='未能提交：'+e.message;return false;}finally{pending=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);$('connect').disabled=connecting;aiRender();gamesRender();}}
 async function readNetworks(){if(scanPolling)return;scanPolling=true;try{let r=await fetch('/api/networks',{cache:'no-store'});if(!r.ok)throw Error();let s=await r.json();$('scan').disabled=pending||s.scanning;
 $('scanStatus').textContent=s.scanning?'正在扫描附近网络…':s.error?'扫描未完成，请稍后重新扫描，也可手动输入。':s.attempted?(s.networks.length?'已找到 '+s.networks.length+' 个网络，按信号从强到弱排列。':'未发现可用网络，可重新扫描或手动输入隐藏网络。'):'';
 if(s.revision!==scanRevision && !s.scanning){scanRevision=s.revision;let select=$('networks'),chosen=select.value;select.replaceChildren(new Option('请选择网络，或在下方手动输入',''));for(let ap of s.networks){let strength=ap.rssi>=-60?'强':ap.rssi>=-75?'中':'弱';select.add(new Option(ap.ssid+' · '+strength+' · '+(ap.secured?'需密码':'开放'),ap.ssid));}select.value=chosen;}
@@ -34,29 +42,77 @@ $('scan').onclick=startScan;$('networks').onchange=e=>{if(e.target.value){$('ssi
 $('wifi').onsubmit=async e=>{e.preventDefault();let b=new URLSearchParams(new FormData(e.target));if(await send('/api/wifi',b)){e.target.elements.password.value='';connecting=true;submittedAt=Date.now();$('connection').dataset.state=1;$('connection').textContent='正在连接 '+b.get('ssid')+'…\n正在等待设备结果，请保持热点连接。';$('connect').disabled=true;$('connection').scrollIntoView({block:'center',behavior:'smooth'});refresh();}};
 $('display').onsubmit=e=>{e.preventDefault();let b=new URLSearchParams(new FormData(e.target));b.set('dim',dims[$('dim').value]);b.set('blank',blanks[$('blank').value]);send('/api/settings',b);};refresh();setInterval(refresh,1000);
 
-let aiSnapshot=null,aiPolling=false,aiRequest=0,aiSending=false,aiRevision='',aiHashApplied=false;
+let aiSnapshot=null,aiPolling=false,aiRequest=0,aiSending=false,aiRevision='',aiHashApplied=false,aiModelLoaded=false,aiOnline=false;
 function aiChosen(){return aiSnapshot?.providers.find(p=>p.id===$('aiProvider').value);}
 function aiRender(){
-const p=aiChosen();if(!p)return;let index=aiSnapshot.providers.indexOf(p),busy=pending||aiSending||aiSnapshot.busy||!!aiRequest;
-$('aiModel').textContent=p.model;$('aiSignup').href=p.url;
-$('aiState').textContent=!aiSnapshot.ready?'模型配置服务不可用，请重启设备重试。':p.configured?(aiSnapshot.active===index?'当前模型 · Key 已保存，待验证':'Key 已保存，待验证'):'尚未配置此模型';
-$('aiSave').disabled=busy||!aiSnapshot.ready;$('aiSelect').disabled=busy||!p.configured||aiSnapshot.active===index;$('aiRemove').disabled=busy||!p.configured;
+const p=aiChosen();if(!p)return;const available=p.available===true,saved=p.configured,busy=pending||aiSending||aiSnapshot.busy||!!aiRequest;
+$('aiControls').hidden=!available;$('aiPlaceholder').hidden=available;
+$('aiProvider').disabled=busy;
+$('aiModelId').required=true;
+$('aiModel').textContent='指令理解 · 火山方舟大模型';
+$('aiSignup').href=p.url;
+$('aiKeyLabel').textContent='方舟 API Key';
+$('aiKeyNote').textContent='Key 不会回显；已保存时留空可只更新 Model ID。新 Key 会替换方舟 Key。';
+$('aiKey').required=!saved;
+$('aiState').textContent=!aiOnline?'暂时无法读取模型配置，请检查设备热点连接。':!aiSnapshot.ready?'模型配置服务不可用，请重启设备重试。':saved?'方舟 Key 已保存，待验证':'尚未配置豆包方舟';
+$('aiKey').disabled=busy||!available||!aiOnline;$('aiModelId').disabled=busy||!available||!aiOnline;
+$('aiSave').disabled=busy||!available||!aiOnline||!aiSnapshot.ready;
+$('aiSelect').disabled=busy||!available||!aiOnline||!aiSnapshot.ready||!p.configured||aiSnapshot.active===aiSnapshot.providers.indexOf(p);
+$('aiRemove').disabled=busy||!available||!aiOnline||!aiSnapshot.ready||!saved;
 }
 async function aiRefresh(){if(aiPolling)return;aiPolling=true;try{
-const r=await fetch('/api/ai',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();aiSnapshot=await r.json();
-let signature=aiSnapshot.providers.map(p=>p.id).join(',');if(signature!==aiRevision){aiRevision=signature;let select=$('aiProvider');select.replaceChildren();for(const p of aiSnapshot.providers)select.add(new Option(p.name,p.id));
-if(aiSnapshot.active<aiSnapshot.providers.length)select.selectedIndex=aiSnapshot.active;}
+const r=await fetch('/api/ai',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();aiSnapshot=await r.json();aiOnline=true;
+let signature=aiSnapshot.providers.map(p=>p.id).join(',');if(signature!==aiRevision){aiRevision=signature;let select=$('aiProvider');select.replaceChildren();for(const p of aiSnapshot.providers)select.add(new Option(p.name+(p.available?'':' · 即将开放'),p.id));
+if(aiSnapshot.active<aiSnapshot.providers.length&&aiSnapshot.providers[aiSnapshot.active].available)select.selectedIndex=aiSnapshot.active;}
 if(!aiHashApplied){const requested=location.hash.match(/^#ai\/(\w+)$/)?.[1];if(requested&&aiSnapshot.providers.some(p=>p.id===requested))$('aiProvider').value=requested;aiHashApplied=true;}
-if(aiRequest && aiSnapshot.completed>=aiRequest){aiRequest=0;$('aiMessage').textContent=aiSnapshot.error?'保存失败，原配置仍保留，请重试。':'配置已保存。模型连接与语音指令尚未接入，Key 有效性待验证。';}
-aiRender();
-}catch(e){$('aiState').textContent='暂时无法读取模型配置，请检查设备热点连接。';}finally{aiPolling=false;}}
-async function aiSend(action){if(aiSending||aiRequest||!aiChosen())return;if(!token){$('aiMessage').textContent='正在连接设备，请稍后重试。';return;}
-if(action==='remove'&&!confirm('删除 '+aiChosen().name+' 的 API Key？'))return;
-const body=new URLSearchParams({provider:$('aiProvider').value,action});if(action==='save'){let key=$('aiKey').value.trim();if(!key){$('aiMessage').textContent='请先输入 API Key。';return;}body.set('key',key);}
-aiSending=true;aiRender();try{let r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body,signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('设备未接受配置，请检查 Key 或稍后重试。');let result=await r.json();aiRequest=result.request;$('aiKey').value='';$('aiMessage').textContent='正在保存到设备…';}
+if(!aiModelLoaded){$('aiModelId').value=aiSnapshot.ark_model;aiModelLoaded=true;}
+if(aiRequest && aiSnapshot.completed>=aiRequest){aiRequest=0;if(!aiSnapshot.error)$('aiModelId').value=aiSnapshot.ark_model;$('aiMessage').textContent=aiSnapshot.error?'保存失败，原配置仍保留，请重试。':'配置已保存。模型连接与语音指令尚未接入，Key 有效性待验证。';}
+}catch(e){aiOnline=false;}finally{aiPolling=false;aiRender();}}
+async function aiSend(action){if(pending||aiSending||aiRequest||!aiChosen()?.available||!aiOnline)return;if(!token){$('aiMessage').textContent='正在连接设备，请稍后重试。';return;}
+if(action==='remove'&&!confirm('删除豆包方舟 API Key？'))return;
+const body=new URLSearchParams({provider:$('aiProvider').value,action});if(action==='save'){const key=$('aiKey').value.trim(),model=$('aiModelId').value.trim();
+if(!key&&!aiChosen().configured){$('aiMessage').textContent='请先输入 API Key。';return;}
+if(!/^[A-Za-z0-9_.-]{1,96}$/.test(model)){$('aiMessage').textContent='请填写有效的 Model ID / Endpoint ID。';return;}
+body.set('key',key);body.set('model',model);}
+aiSending=true;aiRender();try{let r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body,signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('设备未接受配置，请检查 Key、Model ID 或稍后重试。');let result=await r.json();aiRequest=result.request;$('aiKey').value='';$('aiMessage').textContent='正在保存到设备…';}
 catch(e){$('aiMessage').textContent='提交失败：'+e.message+' 可等待状态刷新后重试。';}finally{aiSending=false;aiRender();aiRefresh();}}
 $('aiProvider').onchange=()=>{$('aiKey').value='';$('aiMessage').textContent='';aiRender();};
 $('aiForm').onsubmit=e=>{e.preventDefault();aiSend('save');};$('aiSelect').onclick=()=>aiSend('select');$('aiRemove').onclick=()=>aiSend('remove');
 if(location.hash.startsWith('#ai'))$('ai').scrollIntoView();aiRefresh();setInterval(aiRefresh,1500);
+
+let gamesSnapshot=null,gamesPolling=false,gamesSending=false,gamesRequest=0,gamesDraftRevision=0,gamesDirty=false,gamesOnline=false,gamesConflict=false,gamesReloadRequested=false;
+function gameChosen(){return gamesSnapshot?.games.find(g=>g.id===$('gameSelect').value);}
+function gamesMessage(text,state=0){$('gameMessage').textContent=text;$('gameMessage').dataset.state=state;}
+function gamesFill(){const g=gamesSnapshot?.games.find(g=>g.id==='eight');if(!g)return;$('player1').value=g.player1;$('player2').value=g.player2;gamesDraftRevision=gamesSnapshot.revision;gamesDirty=false;gamesConflict=false;}
+function gamesRender(){
+const g=gameChosen(),busy=pending||gamesSending||!!gamesRequest||gamesSnapshot?.busy,ready=gamesOnline&&gamesSnapshot?.ready;
+$('gameSelect').disabled=!gamesSnapshot||busy;$('gameForm').hidden=!g?.available;$('gamePlaceholder').hidden=!g||g.available;
+for(const id of ['player1','player2'])$(id).disabled=!ready||busy;
+$('gameSave').disabled=!ready||busy||gamesConflict;$('gameReload').disabled=!gamesOnline||!gamesSnapshot||busy;
+}
+async function gamesRefresh(){if(gamesPolling)return;gamesPolling=true;try{
+const r=await fetch('/api/games',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();const next=await r.json();gamesOnline=true;
+if(!gamesSnapshot){gamesSnapshot=next;$('gameSelect').replaceChildren(...next.games.map(g=>new Option(g.name+(g.available?'':' · 即将开放'),g.id)));gamesFill();gamesMessage(next.error?'已使用默认配置，原存档读取异常；保存可替换该玩法配置。':'修改名字后点击保存。',next.error?3:0);}
+else {gamesSnapshot=next;
+if(gamesReloadRequested){gamesFill();gamesReloadRequested=false;gamesMessage('已重新读取设备保存的配置。');}
+else if(gamesRequest&&next.completed>=gamesRequest){gamesRequest=0;if(next.error){gamesMessage('保存失败，设备仍使用原来的名字。请重试。',3);}else{gamesFill();gamesMessage('中八配置已保存，设备上的选手名字已更新。',2);}}
+else if(!gamesSending&&!gamesRequest&&next.revision!==gamesDraftRevision){if(gamesDirty){gamesConflict=true;gamesMessage('配置已被其他页面更新。你的输入仍保留，请重新读取后修改。',3);}else gamesFill();}}
+if(!next.ready)gamesMessage('玩法存储不可用，暂时无法保存，请重启设备重试。',3);
+}catch(e){gamesOnline=false;gamesMessage('暂时无法读取玩法配置，你的输入仍保留。请检查热点连接。',3);}finally{gamesPolling=false;gamesRender();}}
+for(const id of ['player1','player2'])$(id).oninput=()=>{gamesDirty=true;};
+$('gameSelect').onchange=gamesRender;
+$('gameReload').onclick=()=>{if(gamesDirty&&!confirm('重新读取会放弃尚未保存的名字，继续吗？'))return;gamesReloadRequested=true;gamesMessage('正在重新读取…');gamesRefresh();};
+$('gameForm').onsubmit=async e=>{e.preventDefault();if(gamesSending||gamesRequest||!gamesSnapshot||!gamesOnline||gamesConflict)return;
+if(!token){gamesMessage('正在连接设备，请稍后重试。',1);return;}
+const names=[$('player1').value.trim(),$('player2').value.trim()],allowed=/^[\x20-\x7e\u3000-\u303f\u4e00-\u9fef\uff01-\uff60]{1,8}$/u;
+if(names.some(n=>!allowed.test(n))){gamesMessage('名字需为 1–8 个支持的字符，请去除表情、扩展汉字等字符。',3);return;}
+if(names[0].toLowerCase()===names[1].toLowerCase()){gamesMessage('两位选手需要使用不同的名字。',3);return;}
+gamesSending=true;gamesRender();try{
+const body=new URLSearchParams({game:'eight',player1:names[0],player2:names[1],revision:gamesDraftRevision});
+const r=await fetch('/api/games',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body,signal:AbortSignal.timeout(5000)});
+if(r.status===409){gamesConflict=true;throw Error('配置已变化或设备正忙，请重新读取后再保存。');}
+if(!r.ok)throw Error('设备未接受名字，请检查字符和长度。');gamesRequest=(await r.json()).request;gamesMessage('正在保存到设备…',1);
+}catch(e){gamesMessage('未确认保存：'+e.message+' 你的输入仍保留。',3);}finally{gamesSending=false;gamesRender();gamesRefresh();}};
+gamesRefresh();setInterval(gamesRefresh,1500);
 
 </script></html>
