@@ -21,7 +21,7 @@ static app_module_effect_t input(void *c, app_rotation_t r, unsigned slot, app_g
 static bool tick(void *c, int64_t now) { fake_t *f = c; ++f->ticks; assert(now == 42); return true; }
 static bool create(void *c, void *p) { (void)c; (void)p; return true; }
 static void render(void *c, const app_module_view_t *v) { (void)c; (void)v; }
-static const app_module_ops_t ops = {enter, leave, bindings, input, tick, create, render, NULL};
+static const app_module_ops_t ops = {enter, leave, bindings, input, tick, create, render, NULL, NULL};
 int main(void) {
     fake_t f = {.allow_enter = true, .allow_leave = true};
     const app_module_t modules[] = {

@@ -59,21 +59,22 @@ BSP 在 `components/bsp/src/bsp_battery.c` 中嵌入这 80 字节，主机检查
 <a id="scoreboard-font"></a>
 ### 记分牌字体
 
-`fonts/score_font_16.c` 与 `fonts/score_font_inventory.c` 为记分牌固定文本及可打印
-ASCII 生成。字体为 Noto Sans CJK SC Regular，16 px，4 bpp、不压缩、无字距调整；
+`fonts/score_font_16.c`、`fonts/score_font_14.c` 与 `fonts/score_font_inventory.c` 为记分牌固定文本及可打印
+ASCII 生成。字体为 Noto Sans CJK SC Regular，应用使用 16 px，紧凑输入使用 14 px，
+4 bpp、不压缩、无字距调整；
 许可 SIL OFL 1.1（[许可](fonts/OFL.txt)）。来源：[Noto CJK](https://github.com/notofonts/noto-cjk/tree/f8d157532fbfaeda587e826d4cd5b21a49186f7c)，
 `Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf`，SHA-256：
 `2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b`。
 完整源字体和转换器缓存位于被忽略的 `build/font-tools/`。
 修改 `main/score/score_strings.h`、`main/ui/app_strings.h` 或
-`main/app/app_strings.h` 后重新生成：
+`main/app/app_strings.h`、`main/input/text_input_strings.h` 后重新生成：
 
 ```bash
 npm install --prefix build/font-tools --no-audit --no-fund lv_font_conv@1.5.3
 python3 tools/generate_score_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
 ```
 
-生成器校验源哈希。应用编译两个生成 C 文件，启动时校验所有所需码点。
+生成器校验源哈希。应用编译两种字号及共享码点清单，各字号在创建对应界面前校验所需码点。
 此子集不覆盖任意球员姓名；实际中文渲染仍需设备验收。
 
 ### 大厅插画

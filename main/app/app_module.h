@@ -23,6 +23,7 @@ typedef struct {
     bool (*ui_create)(void *context, void *content);
     void (*ui_render)(void *context, const app_module_view_t *view);
     void (*init)(void *context); // optional owner startup, outside UI lock
+    void (*key)(void *context, unsigned slot, bool pressed, int64_t now); // optional raw edges, owner task
 } app_module_ops_t;
 typedef enum { APP_ENTRY_GAME, APP_ENTRY_SETTINGS, APP_ENTRY_SERVICE } app_entry_kind_t;
 typedef enum { APP_ART_EIGHT, APP_ART_CHASE, APP_ART_SNOOKER, APP_ART_SETTINGS, APP_ART_VOICE } app_art_t;

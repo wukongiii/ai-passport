@@ -4,6 +4,7 @@
 #include "score/score_strings.h"
 #include "ui/app_shell.h"
 #include "app/app_ui.h"
+#include "input/text_input.h"
 #include "app/app_settings.h"
 #include "app/app_preferences_store.h"
 #include "app/app_strings.h"
@@ -134,6 +135,39 @@ int main(void) {
     app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-brightness-270");
     app_container_input(&app,1,APP_GESTURE_LONG);
     app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,91,"");
+    // Bounded QWERTY sessions: all modes/menu/confirmation, both rotations.
+    for(unsigned r=0;r<2;++r){
+        app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;
+        app.page=APP_PAGE_HOME;app.focus=5;
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        app_container_tick(&app,1000000);
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        assert(lv_display_get_rotation(d)==(r ? LV_DISPLAY_ROTATION_90 : LV_DISPLAY_ROTATION_270));
+        capture(r ? "qwerty-90" : "qwerty-270");
+        app_container_input(&app,0,APP_GESTURE_DOUBLE);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-upper-90" : "qwerty-upper-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,2,APP_GESTURE_DOUBLE);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-digits-90" : "qwerty-digits-270");
+        app_container_input(&app,2,APP_GESTURE_DOUBLE);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-symbols-90" : "qwerty-symbols-270");
+        app_container_input(&app,1,APP_GESTURE_DOUBLE);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-menu-90" : "qwerty-menu-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-cursor-90" : "qwerty-cursor-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_DOUBLE);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,2,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-clear-90" : "qwerty-clear-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);
+        app_container_input(&app,2,APP_GESTURE_LONG); // Clear -> Exit (nearest column).
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-exit-90" : "qwerty-exit-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");
+        capture(r ? "qwerty-result-90" : "qwerty-result-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);assert(app.page==APP_PAGE_HOME);
+    }
     lv_mem_monitor_t memory; lv_mem_monitor(&memory);
     printf("LVGL max used: %u, remaining: %u, key screens rendered\n",
            (unsigned)memory.max_used,(unsigned)memory.free_size);

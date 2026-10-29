@@ -14,9 +14,13 @@ spec.loader.exec_module(generator)
 class FontTest(unittest.TestCase):
     def test_required_glyphs_and_generated_inventory(self):
         expected = set(generator.codepoints())
-        font = (ROOT / "assets/fonts/score_font_16.c").read_text()
-        actual = {int(cp, 16) for cp in re.findall(r'/\* U\+([0-9A-F]+) ', font)}
-        self.assertEqual(expected, actual)
+        for size in (14, 16):
+            font = (ROOT / f"assets/fonts/score_font_{size}.c").read_text()
+            actual = {int(cp, 16) for cp in re.findall(r'/\* U\+([0-9A-F]+) ', font)}
+            self.assertEqual(expected, actual)
+            self.assertIn(".bitmap_format = 0", font)
+            self.assertIn(".bpp = 4", font)
+            self.assertNotIn("CMAP_FORMAT0_FULL", font)
         inventory = (ROOT / "assets/fonts/score_font_inventory.c").read_text()
         self.assertEqual(expected, {int(cp, 16) for cp in re.findall(r'0x([0-9a-f]+)', inventory)})
         self.assertNotIn(0x9F98, actual)  # Arbitrary names are deliberately unsupported.

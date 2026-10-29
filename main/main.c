@@ -94,7 +94,9 @@ void app_main(void) {
     for (;;) {
         input_event_t input;
         bool render = true;
-        if (xQueueReceive(s_input_queue, &input, pdMS_TO_TICKS(250)) == pdTRUE) {
+        const app_module_t *current=app_container_active(&s_app);
+        const unsigned wait_ms=current && current->ops && current->ops->key ? 20 : 250;
+        if (xQueueReceive(s_input_queue, &input, pdMS_TO_TICKS(wait_ms)) == pdTRUE) {
             last_input = esp_timer_get_time();
             if (blanked) {
                 blanked = false;
@@ -106,14 +108,19 @@ void app_main(void) {
                 input.event == BSP_BTN_CLICK ? SCORE_INPUT_CLICK :
                 input.event == BSP_BTN_DOUBLE ? SCORE_INPUT_DOUBLE :
                 input.event == BSP_BTN_LONG ? SCORE_INPUT_LONG : SCORE_INPUT_RELEASE;
-            if (!score_input_consume(&wake_guard, event) &&
-                (input.event == BSP_BTN_CLICK || input.event == BSP_BTN_DOUBLE || input.event == BSP_BTN_LONG)) {
+            if (!score_input_consume(&wake_guard, event)) {
                 const unsigned hardware = input.button == BSP_BTN_UP ? 0 :
                                           input.button == BSP_BTN_DOWN ? 1 : 2;
                 const unsigned slot = app_key_from_hardware(s_app.rotation, hardware);
-                const app_gesture_t gesture = input.event == BSP_BTN_LONG ? APP_GESTURE_LONG :
-                    input.event == BSP_BTN_DOUBLE ? APP_GESTURE_DOUBLE : APP_GESTURE_SHORT;
-                app_container_input(&s_app, slot, gesture);
+                const app_module_t *active=app_container_active(&s_app);
+                if(active && active->ops && active->ops->key &&
+                   (input.event==BSP_BTN_PRESS || input.event==BSP_BTN_RELEASE))
+                    active->ops->key(active->context,slot,input.event==BSP_BTN_PRESS,esp_timer_get_time());
+                if(input.event==BSP_BTN_CLICK || input.event==BSP_BTN_DOUBLE || input.event==BSP_BTN_LONG) {
+                    const app_gesture_t gesture=input.event==BSP_BTN_LONG ? APP_GESTURE_LONG :
+                        input.event==BSP_BTN_DOUBLE ? APP_GESTURE_DOUBLE : APP_GESTURE_SHORT;
+                    app_container_input(&s_app,slot,gesture);
+                }
             }
         } else render = false;
         const int64_t now = esp_timer_get_time();

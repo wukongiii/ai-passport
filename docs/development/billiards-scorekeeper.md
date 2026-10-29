@@ -338,3 +338,64 @@ Device tests: PASS for write-hash verification and 18-second startup only.
 Ready reported 214516 bytes free heap and largest block 114688 bytes; no
 panic/assert/reset loop was observed. Serial closed. Physical checks above
 remain unverified.
+
+## Standalone QWERTY input laboratory
+
+The hall's Input Test remains independent of business fields and network services.
+The previous frequency-based grouping and group-selection screens are discarded.
+This iteration implements a phone-style QWERTY 26-key keyboard, with separate
+number and symbol modes. Nine-key composition is deferred; it is not exposed as
+an implemented option. Tasks remain `there`, `1234567890`, `Ther_2026!`, and free
+input. Results show entered text and target match only; no statistics appear.
+
+| Gesture | Left key | Middle key | Right key |
+| --- | --- | --- | --- |
+| Short | Move left | Insert/select/confirm | Move right |
+| Long | Previous row | Backspace | Next row |
+| Double | Toggle case (ABC from number/symbol mode) | Edit menu | Cycle ABC/numbers/symbols |
+
+The footer provides visible ABC/123/symbol, Space, Menu and Finish keys. Users
+can select every operation without shortcut knowledge. Numeric-only mode hides
+non-digit insertion and keyboard switching. Every available gesture registers
+its current label and semantic role with the shared hint bar. Horizontal movement
+wraps inside the row; vertical movement wraps between rows and maps by relative
+column center. Long press moves exactly once, with no auto-repeat. Cursor mode
+uses left/right, middle to return, and middle long to backspace. The edit menu
+offers cursor, reveal/hide, confirmed clear, finish and confirmed exit. Confirmation
+keeps middle as Confirm, left as Cancel and right as Back.
+
+`input/text_input` owns an allocation-free ASCII editor and data-defined keyboard
+rows, independent of ESP-IDF/LVGL. It accepts maximum length (up to 64), numeric
+restriction, secret mode and initial text. The lab uses 63 characters and visible
+text. All printable ASCII, including space and uppercase, is reachable. Secret
+mode reveals only the last inserted character for one second; a separate expiry
+refresh masks it without relying on statistics or later keypresses. Exit wipes
+text, and nothing is persisted or transmitted.
+
+`text_input_ui` uses the verified 14 px Chinese/ASCII font, compact input line and
+four keyboard rows. It renders keys through one LVGL draw callback rather than
+allocating one widget per key. The UI takes a model snapshot under the existing
+LVGL lock; drawing does not read the editor while the owner task changes it.
+Row layout is reusable for future keyboard work; nine-key character selection
+and any prediction require a separate implementation. No Chinese composition
+is claimed. Button callbacks still only enqueue events, and there are no UI
+workers/timers to stop at exit.
+
+Host checks cover ASCII inventory, all-key reachability, row wrapping/mapping,
+all nine gesture bindings, footer actions, case/mode isolation, insertion,
+backspace/cursor, masking, length limits and confirmed clear/exit. Finite LVGL
+previews cover both rotations, case, all modes, menu, cursor, clear, exit and
+results. No stress loops run. The user accepted this QWERTY design; exhaustive physical
+key acceptance and comparative input efficiency remain unverified.
+
+Validation, 2026-10-29: Build PASS and Host tests PASS through the complete gate.
+Finite LVGL previews PASS: peak pool 25440 bytes, final free 10488 bytes. The
+application is 1072064 bytes.
+Archive: `build/firmware/226e6024ffb6736cc17a6a0a5910b51db1713969c0d041b9d8c7bc9b8363918b/`.
+Full-image SHA-256: `226e6024ffb6736cc17a6a0a5910b51db1713969c0d041b9d8c7bc9b8363918b`.
+Matching ELF SHA-256: `942c152f07802f42c227168509488589c7b8ac97a84de727a0c771c409015bd9`.
+Device tests: PASS for application-only write hash and 12-second matching-ELF
+startup, without observed panic/assert/reset loops. Settings/NVS and partition
+table were not overwritten; serial closed.
+Unverified: exhaustive physical key operation, gesture timing and practical
+input efficiency. The user accepted this version.

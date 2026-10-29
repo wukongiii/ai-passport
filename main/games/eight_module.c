@@ -84,7 +84,7 @@ static void ui_render(void *context, const app_module_view_t *view) {
         view->battery, message, view->storage_overlay && *view->storage_overlay ? view->storage_overlay : state.storage);
 }
 static void init(void *context) { (void)context; eight_module_init(); }
-static const app_module_ops_t ops = {enter, leave, bindings, input, tick, ui_create, ui_render, init};
+static const app_module_ops_t ops = {enter, leave, bindings, input, tick, ui_create, ui_render, init, NULL};
 const app_module_t app_module_eight = {
     1, TXT_APP_EIGHT, TXT_APP_EIGHT_DESC, APP_ENTRY_GAME, &ops, NULL, APP_ART_EIGHT
 };

@@ -105,5 +105,5 @@ static void render(void *c,const app_module_view_t *v) {
     lv_obj_set_y(hint,v->content_height-38);lv_obj_set_y(status,v->content_height-18);
     lv_label_set_text(status,state.dirty || (state.storage && strcmp(state.storage,TXT_APP_PREF_SAVED)!=0) ? app_settings_storage_status() : "");
 }
-static const app_module_ops_t ops={enter,leave,bindings,input,tick,create,render,init};
+static const app_module_ops_t ops={enter,leave,bindings,input,tick,create,render,init,NULL};
 const app_module_t app_module_settings={4,TXT_APP_SETTINGS,TXT_APP_SETTINGS_DESC,APP_ENTRY_SETTINGS,&ops,NULL,APP_ART_SETTINGS};
