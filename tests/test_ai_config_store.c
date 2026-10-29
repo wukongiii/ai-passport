@@ -37,8 +37,12 @@ int main(void){
     assert(disk[2]==3 && disk_size==SIZE && !strcmp((char *)disk+4,"ark-new"));
     assert(!strcmp((char *)disk+4+AI_KEY_CAPACITY,"legacy-other"));
     ai_config_service_init();assert(snapshot().active==0 && !strcmp(snapshot().ark_model,"ep-test"));
+    char key[AI_KEY_CAPACITY],model[AI_MODEL_CAPACITY];
+    assert(ai_config_credentials(0,key,model)&&!strcmp(key,"ark-new")&&!strcmp(model,"ep-test"));
+    assert(!ai_config_credentials(AI_PROVIDER_COUNT,key,model)&&!key[0]&&!model[0]);
     strcpy(r.model,"ep-new");fail_write=true;assert(ai_config_submit(&r,&id));ai_config_service_poll();
     assert(snapshot().error && !strcmp(snapshot().ark_model,"ep-test"));fail_write=false;
+    assert(ai_config_credentials(0,key,model)&&!strcmp(model,"ep-test"));
     fail_commit=true;assert(ai_config_submit(&r,&id));ai_config_service_poll();assert(snapshot().error && !strcmp(snapshot().ark_model,"ep-test"));fail_commit=false;
     assert(ai_config_submit(&r,&id));ai_config_service_poll();assert(!strcmp(snapshot().ark_model,"ep-new"));
     r.action=AI_CONFIG_REMOVE;assert(ai_config_submit(&r,&id));ai_config_service_poll();

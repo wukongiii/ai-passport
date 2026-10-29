@@ -1,5 +1,7 @@
 idf_component_register(
     SRCS "main.c"
+         "ai/app_game_voice.c"
+         "ai/voice_capture.c"
          "ai/ai_json.c"
          "ai/ai_session.c"
          "ai/ai_provider.c"
@@ -46,7 +48,7 @@ idf_component_register(
          "../assets/fonts/score_font_inventory.c"
     EMBED_TXTFILES "network/portal.html"
     INCLUDE_DIRS "."
-    REQUIRES esp_tts bsp esp_hw_support esp_timer nvs_flash esp_app_format esp_wifi esp_netif esp_event esp_http_server esp_driver_gpio json
+    REQUIRES esp_http_client mbedtls esp_tts bsp esp_hw_support esp_timer nvs_flash esp_app_format esp_wifi esp_netif esp_event esp_http_server esp_driver_gpio json
 )
 
 # Voice data stays memory mapped in app rodata; preserve the existing partitions.

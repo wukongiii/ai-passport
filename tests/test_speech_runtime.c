@@ -38,5 +38,12 @@ int main(void){
  assert(creates==2 && destroys==2);
  wake_error=ESP_FAIL;assert(speak("五比二",0)==ESP_FAIL);assert(sleeping && writes==2 && creates==2);
  wake_error=ESP_OK;assert(speak("五比二",0)==ESP_OK);assert(sleeping && writes==3 && creates==3 && destroys==3);
+ assert(app_speech_start());
+ assert(app_speech_capture_acquire());assert(!app_speech_capture_acquire());
+ assert(!app_speech_say("三比二"));app_speech_capture_release();
+ assert(app_speech_say("三比二"));assert(!app_speech_capture_acquire());
+ app_speech_stop();assert(app_speech_capture_acquire());app_speech_capture_release();
+ view.state=SPEECH_PLAYING;assert(!app_speech_capture_acquire());
+ view.state=SPEECH_STOPPING;assert(!app_speech_capture_acquire());
  puts("Speech sleeping-codec playback, replay, wake failure and recovery: PASS");
 }

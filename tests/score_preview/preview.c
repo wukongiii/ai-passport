@@ -1,4 +1,6 @@
+#include <string.h>
 #include "lvgl.h"
+#include "ai/app_game_voice.h"
 #include "score/score.h"
 #include "score/score_ui.h"
 #include "score/score_strings.h"
@@ -50,6 +52,16 @@ void ai_config_snapshot(ai_config_snapshot_t *out){*out=ai_preview;}
 bool ai_config_submit(const ai_config_request_t *r,unsigned *id){(void)id;ai_preview.active=r->provider;ai_preview.revision++;return true;}
 static game_preferences_snapshot_t game_names={.ready=true,.revision=1};
 void game_preferences_snapshot(game_preferences_snapshot_t *out){*out=game_names;}
+static game_voice_snapshot_t game_voice_preview;
+void app_game_voice_snapshot(game_voice_snapshot_t *out){*out=game_voice_preview;}
+void app_game_voice_bindings(ai_game_target_t target,app_bindings_t *b){
+ if(target.ops && game_voice_preview.state>=GAME_VOICE_STARTING && game_voice_preview.state<=GAME_VOICE_WAITING){
+  b->actions[APP_GESTURE_LONG][1]=(app_action_hint_t){0};
+  b->actions[APP_GESTURE_DOUBLE][1]=(app_action_hint_t){0};b->actions[APP_GESTURE_SHORT][1]=(app_action_hint_t){0};
+  if(game_voice_preview.state==GAME_VOICE_RECORDING)app_actions_register(b,1,APP_GESTURE_SHORT,64001,TXT_GAME_VOICE_SEND,true,APP_ACTION_CONFIRM);
+  app_actions_register(b,1,APP_GESTURE_LONG,64002,TXT_GAME_VOICE_CANCEL,true,APP_ACTION_CANCEL);
+ }else if(target.ops){app_actions_register(b,1,APP_GESTURE_DOUBLE,64000,TXT_GAME_VOICE,true,APP_ACTION_NAVIGATE);}
+}
 static unsigned char frame[320*240*3];
 static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *data) {
     const uint16_t *p=(const uint16_t *)data;
@@ -178,6 +190,16 @@ int main(void) {
     app.page=APP_PAGE_HOME; app.focus=0;
     app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,85,"");
     app_container_input(&app,0,APP_GESTURE_SHORT); app_ui_render(&app,85,""); capture("container-eight");
+    for(unsigned r=0;r<2;++r){
+        app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;
+        game_voice_preview.state=GAME_VOICE_RECORDING;game_voice_preview.milliseconds=3000;
+        app_ui_render(&app,85,"");capture(r ? "game-record-90" : "game-record-270");
+        game_voice_preview.state=GAME_VOICE_WAITING;strcpy(game_voice_preview.text,TXT_GAME_VOICE_WAIT);
+        app_ui_render(&app,85,"");capture(r ? "game-wait-90" : "game-wait-270");
+        game_voice_preview.state=GAME_VOICE_ERROR;strcpy(game_voice_preview.text,TXT_GAME_VOICE_NEED_WIFI);
+        app_ui_render(&app,85,"");capture(r ? "game-error-90" : "game-error-270");
+    }
+    game_voice_preview=(game_voice_snapshot_t){0};
     app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,85,""); capture("return-home");
     // Settings: finite key-screen coverage and confirmed direction through container.
     app_settings_device_info(91,4093,"cdd94cd-dirty");

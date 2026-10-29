@@ -67,6 +67,15 @@ int main(void){
     ai_model_request_t bounded={"ep-test","test",&snapshot};char smallbody[32];
     assert(!adapter->encode(&workspace,&bounded,smallbody,sizeof(smallbody)));
     assert(strstr(body,"ep-test")&&strstr(body,"adjust_score")&&strstr(body,"张三加一分"));
+    // Audio framing must remain valid JSON, retain tools, and escape clarification.
+    char head[AI_BODY_CAPACITY],tail[4096],audio_body[AI_BODY_CAPACITY+4096];
+    ai_model_request_t audio={"ep-test","回答上个问题：张三 \"加分\"",&snapshot};
+    assert(adapter->audio_parts(&workspace,&audio,head,sizeof(head),tail,sizeof(tail)));
+    snprintf(audio_body,sizeof(audio_body),"%sUklGRg==%s",head,tail);
+    assert(ai_json_parse(&workspace,audio_body,strlen(audio_body)));
+    assert(strstr(audio_body,"input_audio")&&strstr(audio_body,"adjust_score")&&strstr(audio_body,"wav"));
+    assert(!adapter->audio_parts(&workspace,&audio,head,20,tail,sizeof(tail)));
+    assert(!adapter->audio_parts(&workspace,&audio,head,sizeof(head),tail,8));
     uint32_t oldtoken=token;
     ai_reply_t ignored={.kind=AI_REPLY_TEXT,.text="ignored"};
     assert(ai_session_finish(&session,app_container_ai_target(&app),token+1,150,&ignored,&completion)==AI_FLOW_DUPLICATE && session.pending);assert(ai_session_begin(&session,app_container_ai_target(&app),101,&snapshot,&token)==AI_FLOW_BUSY);

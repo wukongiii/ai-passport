@@ -37,3 +37,6 @@ void ai_config_snapshot(ai_config_snapshot_t *);
 bool ai_config_submit(const ai_config_request_t *,unsigned *request_id);
 void ai_config_service_init(void);
 void ai_config_service_poll(void);
+
+/* Worker-only bounded copy for transport. Never expose/log this material. */
+bool ai_config_credentials(unsigned provider,char key[AI_KEY_CAPACITY],char model[AI_MODEL_CAPACITY]);

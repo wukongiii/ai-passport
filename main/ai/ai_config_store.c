@@ -25,7 +25,8 @@ void ai_config_snapshot(ai_config_snapshot_t *out){portENTER_CRITICAL(&lock);*ou
 void ai_config_service_init(void){
     if(opened){nvs_close(store);opened=false;}
     portENTER_CRITICAL(&lock);view.ready=false;view.busy=false;has_pending=false;portEXIT_CRITICAL(&lock);
-    ai_config_default(&current);
+    ai_config_t initial;ai_config_default(&initial);
+    portENTER_CRITICAL(&lock);current=initial;portEXIT_CRITICAL(&lock);
     esp_err_t e=nvs_flash_init();if(e==ESP_OK)e=nvs_open("ai_voice",NVS_READWRITE,&store);
     if(e!=ESP_OK){publish(e);return;}
     opened=true;
@@ -48,7 +49,7 @@ void ai_config_service_init(void){
             memcpy(loaded.ark_model,record+LEGACY_SIZE,AI_MODEL_CAPACITY);
         }else valid=false;
         if(!valid || !ai_config_valid(&loaded))e=ESP_ERR_INVALID_ARG;
-        else current=loaded;
+        else{portENTER_CRITICAL(&lock);current=loaded;portEXIT_CRITICAL(&lock);}
         memset(&loaded,0,sizeof(loaded));
     }else if(e==ESP_ERR_NVS_NOT_FOUND)e=ESP_OK;
     memset(record,0,sizeof(record));
@@ -70,9 +71,17 @@ void ai_config_service_poll(void){
         uint8_t record[RECORD_SIZE]={'A','I',3,next.active};memcpy(record+4,next.keys,sizeof(next.keys));
         memcpy(record+LEGACY_SIZE,next.ark_model,AI_MODEL_CAPACITY);
         e=nvs_set_blob(store,"models",record,sizeof(record));if(e==ESP_OK)e=nvs_commit(store);
-        memset(record,0,sizeof(record));if(e==ESP_OK)current=next;
+        memset(record,0,sizeof(record));if(e==ESP_OK){portENTER_CRITICAL(&lock);current=next;portEXIT_CRITICAL(&lock);}
     }
     memset(&next,0,sizeof(next));memset(&request,0,sizeof(request));
     publish(e);
     portENTER_CRITICAL(&lock);view.completed=id;view.busy=false;++view.revision;portEXIT_CRITICAL(&lock);
+}
+
+bool ai_config_credentials(unsigned provider,char key[AI_KEY_CAPACITY],char model[AI_MODEL_CAPACITY]){
+ if(!key||!model)return false;
+ portENTER_CRITICAL(&lock);
+ bool ok=view.ready && provider<AI_PROVIDER_COUNT && ai_provider(provider)->available && *current.keys[provider];
+ if(ok){memcpy(key,current.keys[provider],AI_KEY_CAPACITY);memcpy(model,current.ark_model,AI_MODEL_CAPACITY);}
+ portEXIT_CRITICAL(&lock);if(!ok){key[0]=0;model[0]=0;}return ok;
 }

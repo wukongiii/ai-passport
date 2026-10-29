@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -37,7 +38,7 @@ static esp_netif_t *station,*access_point;
 static esp_event_handler_instance_t wifi_handler,ip_handler;
 static bool handler_wifi,handler_ip,wifi_initialized,wifi_started;
 static nvs_handle_t store;
-static bool store_ready;
+static bool store_ready,time_started,time_initialized;
 static app_net_credentials_t saved,candidate;
 static bool candidate_new,waiting_disconnect;
 static bool accepting_connect;
@@ -380,6 +381,7 @@ static esp_err_t connect_to(const app_net_credentials_t *c,bool is_new,app_netwo
 static void failed(app_network_snapshot_t *s,esp_err_t e){s->state=APP_NET_FAILED;s->busy=false;s->associated=false;s->attempt_seconds=0;s->error=e;connect_deadline=retry_at=0;}
 static void cleanup(void){
     if(server){httpd_stop(server);server=NULL;}
+    if(time_initialized){esp_netif_sntp_deinit();time_initialized=false;time_started=false;}
     if(wifi_started){esp_wifi_stop();wifi_started=false;}
     if(handler_wifi){esp_event_handler_instance_unregister(WIFI_EVENT,ESP_EVENT_ANY_ID,wifi_handler);handler_wifi=false;}
     if(handler_ip){esp_event_handler_instance_unregister(IP_EVENT,IP_EVENT_STA_GOT_IP,ip_handler);handler_ip=false;}
@@ -394,6 +396,9 @@ static esp_err_t initialize(void){
     size_t n=sizeof(saved);e=nvs_get_blob(store,"station",&saved,&n);
     if(e!=ESP_OK || n!=sizeof(saved) || !app_net_credentials_valid(&saved))memset(&saved,0,sizeof(saved));
     e=esp_netif_init();if(e!=ESP_OK)return e;
+    esp_sntp_config_t clock_config=ESP_NETIF_SNTP_DEFAULT_CONFIG("ntp.aliyun.com");
+    clock_config.start=false;
+    e=esp_netif_sntp_init(&clock_config);if(e!=ESP_OK)return e;time_initialized=true;
     e=esp_event_loop_create_default();if(e!=ESP_OK && e!=ESP_ERR_INVALID_STATE)return e;
     esp_netif_config_t sta_cfg=ESP_NETIF_DEFAULT_WIFI_STA(),ap_cfg=ESP_NETIF_DEFAULT_WIFI_AP();
     station=esp_netif_new(&sta_cfg);if(!station)return ESP_ERR_NO_MEM;
@@ -449,6 +454,7 @@ static void worker(void *arg){
                    esp_wifi_sta_get_ap_info(&connected_ap)==ESP_OK &&
                    !strncmp((const char *)connected_ap.ssid,candidate.ssid,sizeof(connected_ap.ssid))){
                     s.state=APP_NET_CONNECTED;s.busy=false;s.associated=true;s.attempt_seconds=0;s.reason=0;s.error=0;connect_deadline=retry_at=0;attempts=0;
+                    if(!time_started && esp_netif_sntp_start()==ESP_OK)time_started=true;
                     struct in_addr ip={.s_addr=c.ip};inet_ntoa_r(ip,s.ip,sizeof(s.ip));
                     if(candidate_new){e=nvs_set_blob(store,"station",&candidate,sizeof(candidate));if(e==ESP_OK)e=nvs_commit(store);
                         s.save_error=e;if(e==ESP_OK){saved=candidate;s.saved=true;candidate_new=false;}}

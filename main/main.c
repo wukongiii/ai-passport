@@ -10,6 +10,7 @@
 #include "app/app_settings.h"
 #include "network/app_network.h"
 #include "speech/app_speech.h"
+#include "ai/app_game_voice.h"
 #include "esp_app_desc.h"
 #include "score/score_strings.h"
 #include "esp_heap_caps.h"
@@ -85,6 +86,7 @@ void app_main(void) {
     app_settings_device_info(battery,millivolts,esp_app_get_description()->version);
     app_network_publish_preferences(app_settings_preferences());
     app_network_init();
+    if(!app_game_voice_start())ESP_LOGW(TAG,"Game voice worker unavailable");
     int64_t last_battery = esp_timer_get_time();
     int64_t last_input = last_battery;
     bool blanked = false;
@@ -126,7 +128,7 @@ void app_main(void) {
                 if(input.event==BSP_BTN_CLICK || input.event==BSP_BTN_DOUBLE || input.event==BSP_BTN_LONG) {
                     const app_gesture_t gesture=input.event==BSP_BTN_LONG ? APP_GESTURE_LONG :
                         input.event==BSP_BTN_DOUBLE ? APP_GESTURE_DOUBLE : APP_GESTURE_SHORT;
-                    app_container_input(&s_app,slot,gesture);
+                    if(!app_game_voice_input(app_container_ai_target(&s_app),slot,gesture))app_container_input(&s_app,slot,gesture);
                 }
             }
         } else render = false;
@@ -134,6 +136,7 @@ void app_main(void) {
         const app_rotation_t before_network=s_app.rotation;
         // Inactive games still get persistence retries, outside the UI lock.
         if (app_container_tick(&s_app, now)) render = true;
+        if(app_game_voice_tick(app_container_ai_target(&s_app),now)){render=true;last_input=now;}
         if(s_app.rotation==before_network && before_network!=app_settings_preferences()->rotation){
             s_app.rotation=app_settings_preferences()->rotation;render=true;
         }

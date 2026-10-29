@@ -49,3 +49,8 @@ CONFIG_ESP_WIFI_RX_BA_WIN=4
 # Protect I2S service during settings/NVS writes; playback still needs device checks.
 CONFIG_I2S_ISR_IRAM_SAFE=y
 CONFIG_LV_USE_QRCODE=y
+
+# Direct Ark HTTPS with verified server certificates; no gateway or ASR service.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y

@@ -901,13 +901,14 @@ sequenceDiagram
 
 `begin/finish/cancel`, container access and game callbacks run only on the existing
 application owner task, outside the LVGL lock. Workers never access live games or
-widgets. The caller owns the snapshot mailbox and must keep it immutable until
+widgets. Hint rendering may call the owner-only stamp while holding the LVGL lock;
+it only copies game/configuration state and performs no I/O. The caller owns the snapshot mailbox and must keep it immutable until
 the worker finishes; a timeout/cancel does not authorize reusing memory still held
 by a worker. The original local token travels with the worker job, not with model
 generated arguments. A different/old token does not consume a newer pending job.
 Transport failure or an invalid decoded response cancels the matching session.
-A future coordinator must cancel pending work before navigation/model changes,
-use a queue for completion, and render after a successful `changed` result.
+The voice coordinator cancels pending work before navigation/model changes and
+uses a single completion mailbox; rendering follows owner-task result consumption.
 Activation checks additionally reject replies when cancellation is missed.
 
 The first game adapter is Chinese eight-ball. Its context includes game/unit,
@@ -933,30 +934,29 @@ are labels; changing a name invalidates in-flight interpretation without changin
 player identity. New-match/reset operations are not exposed in this first toolset.
 A game subpage refuses AI snapshots/execution while manual settings are open.
 
-The Ark adapter encodes one non-streaming text turn and decodes exactly one text,
+The Ark adapter encodes one non-streaming text or audio turn and decodes exactly one text,
 clarification or tool result. Multiple choices/tools, truncation, malformed JSON,
 duplicate keys, embedded NUL, invalid UTF-8 and oversized values are rejected.
 Tool-associated prose is discarded so it cannot claim the operation succeeded.
 Ordinary model text is kept separate from authoritative operation results and
 cannot change game state. Worker credentials are excluded from bodies/snapshots;
-they belong in the future transport's authorization header.
+the HTTPS transport copies them into its authorization header.
 
-This increment supplies and tests the interfaces, real game execution and Ark
-wire codec. It deliberately does not start an HTTP/audio worker or add a UI trigger:
-no network call, Key readout, microphone upload or new standalone ASR is enabled.
-Those stages can now consume this contract without adding provider details to games.
+The initial contract increment supplied game execution and the Ark wire codec.
+The voice coordinator below now connects those contracts to microphone capture,
+direct HTTPS and the game controls; standalone ASR remains absent.
 
 All buffers are bounded; JSON parsing uses a caller-owned workspace without heap
 allocation. In the 64-bit host test the snapshot is 3600 bytes, parser workspace
 6168 bytes, session 56 bytes, reply 688 bytes and completion 396 bytes. These host
 sizes are not an ESP32 heap measurement. Large mailboxes/workspaces must be static
-or explicitly allocated by the future worker, never placed on the app stack. The
-eight-ball argument parser is owner-only and uses one static workspace. Request
-and response bodies are each limited to 6144 bytes; text input is at most 511 bytes,
+or explicitly allocated by the worker, never placed on the app stack. The
+eight-ball argument parser is owner-only and uses one static workspace. Text request envelopes
+and response bodies are each limited to 6144 bytes; audio is uploaded in chunks; text input is at most 511 bytes,
 arguments at most 255 bytes, and output text at most 384 bytes, without truncation.
 
 
-Contract validation, 2026-10-30: complete gate Build PASS, Host tests PASS. The
+Initial contract validation, 2026-10-30: complete gate Build PASS, Host tests PASS. The
 integration test uses the real container, eight-ball module, score core and Ark
 codec with simulated model responses. It verifies scoring/undo/query persistence,
 unknown/duplicate/invalid arguments, rule rejection, local edit/rename races,
@@ -965,7 +965,75 @@ clarification isolation, malformed model responses and bounded JSON handling.
 The same integration passed AddressSanitizer and UndefinedBehaviorSanitizer.
 Finite real-LVGL previews still passed at both landscape rotations (24792-byte
 peak). Device tests NOT RUN; transport, real-model interpretation, microphone,
-board RAM/timing and physical controls remain unverified. No flash or commit.
+board RAM/timing and physical controls remain unverified. No flash in that increment.
 Verified archive/full SHA-256:
 `build/firmware/3448c01938b1e542aa8bf2edce6693227e8d2882004df0397327088cc499ef77/`.
 Matching ELF SHA-256: `f5fc27269afe568582ca6ffdfc4e0b7da42b47c04065adf1c0dd1e907e7a7e11`.
+
+
+## Middle-button voice control
+
+`main/ai/app_game_voice` coordinates the active game, audio worker and model
+adapter without importing game-specific score types. Games still validate and
+execute their own operations. No gateway, independent ASR service, wake word or
+continuous listening is used. Configure the Ark Key and an audio-capable Model ID
+in the existing AI voice phone portal, connect Wi-Fi, then enter Chinese eight-ball.
+
+| State | Middle short | Middle long | Middle double |
+| --- | --- | --- | --- |
+| Normal game | Settings | Return to hall | Begin recording |
+| Preparing | Disabled | Cancel | Disabled |
+| Recording | Send | Cancel | Disabled |
+| Uploading / understanding | Disabled | Cancel | Disabled |
+| Cancelling | Disabled | Continue cancellation | Disabled |
+
+Left/right keep the manual scoring gestures: they cancel the voice session first,
+then fall through to the normal game handler. Cancellation invalidates execution
+immediately; worker cleanup can take a network timeout. The next request cannot
+reuse buffers until cleanup and owner consumption both finish. Hint rows are
+registered dynamically using the common semantic colors in both landscape
+rotations; recording status and answers replace the board's lower feedback area.
+Manual navigation clears voice feedback. Ordinary model text never changes scores;
+accepted tools show and speak the game-generated authoritative result. Text and
+clarification answers also use local TTS when they fit its existing 120-byte limit;
+longer answers remain visible in the scrolling status. A clarification is carried
+to the next recording only while game activation, scores, player names and model
+configuration still match. This is a single clarification turn, not chat history.
+
+The app-lifetime worker has a 12 KB stack. Capture takes an exclusive lease from
+local TTS, wakes the codec at 16 kHz/16-bit mono, averages pairs to 8 kHz and stores
+IMA ADPCM in at most 40000 bytes of temporary RAM. Recording ends on Send or after
+10 seconds; silence and clips below 250 ms are rejected. Upload sequentially decodes
+to ordinary 8 kHz/16-bit mono WAV, Base64-encodes 768-byte chunks, and sends Ark's
+`input_audio` plus captured game context/tools. The provider never receives ADPCM.
+No recording is written to NVS or Flash. Heap allocations, HTTP errors, oversized
+responses and invalid tool results fail without changing scores. The text envelope
+uses a 6144-byte head and 4096-byte suffix; response limit remains 6144 bytes. The
+parser is released before TLS and recreated after HTTP cleanup; the recording is
+freed after upload. These are allocation budgets, not measured board memory peaks.
+
+Wi-Fi starts SNTP after obtaining an IP. Voice preparation waits at most five
+seconds for a plausible clock before certificate-verified HTTPS. The connection
+uses a five-second timeout, then one-second I/O polling, bounded by the session's
+30-second deadline including preparation and recording. Header/read timeouts are
+retried without submitting a second model request. DNS/driver internals can delay
+cleanup; the UI owner remains non-blocking and discards any late completion.
+Certificates use the ESP-IDF common root bundle. Existing partitions and NVS
+formats remain unchanged; credentials are copied only into the worker/header.
+
+Validation covers the real coordinator/worker with deterministic audio and HTTP
+boundaries, finite codec quality/bounds checks, ten-second auto-send, manual and
+model races, completed-mailbox reuse, cancellation, allocation/codec/HTTP failures,
+header/read retries, valid audio JSON, clarification and speech capture leases.
+The focused worker test passed AddressSanitizer and UndefinedBehaviorSanitizer.
+Real LVGL previews render recording/wait/error at 90 and 270 degrees, with a
+24792-byte LVGL peak. Device tests remain NOT RUN: microphone level, 8 kHz audio
+interpretation, real HTTPS/TLS heap and stack peaks, cancellation timing, local
+speech and physical double-click behavior require on-board acceptance. No flash.
+
+
+Voice implementation validation, 2026-10-30: complete gate Build PASS, Host tests
+PASS; Device tests NOT RUN. No flashing or NVS changes were performed.
+Verified archive/full-image SHA-256:
+`build/firmware/25dbd1889d0c1e3872ab1ed742fb3b2cf7860bcf3d7424937ed4f87a7b4a7b24/`.
+Matching ELF SHA-256: `751314bf7ab8218b3afcd88357e149571fd7494d4f12a96d9687f621c954a896`.

@@ -14,6 +14,7 @@ static TaskHandle_t worker;
 static speech_model_t model;
 static app_speech_snapshot_t view={.volume=65};
 static unsigned cancel_epoch;
+static bool capture_owned;
 extern const unsigned char voice_data[] asm("_binary_esp_tts_voice_data_xiaoxin_small_dat_start");
 static bool cancelled(unsigned epoch){portENTER_CRITICAL(&lock);bool yes=epoch!=cancel_epoch;portEXIT_CRITICAL(&lock);return yes;}
 static esp_err_t speak(const char *text,unsigned epoch){
@@ -64,7 +65,7 @@ static void run(void *arg){
     for(;;){
         char text[SPEECH_TEXT_CAPACITY];unsigned epoch;
         portENTER_CRITICAL(&lock);
-        bool have=speech_model_take(&model,(uint64_t)esp_timer_get_time()/1000,text);
+        bool have=!capture_owned && speech_model_take(&model,(uint64_t)esp_timer_get_time()/1000,text);
         epoch=cancel_epoch;
         if(have){view.state=SPEECH_PLAYING;view.pending=false;view.error=0;++view.revision;}
         portEXIT_CRITICAL(&lock);
@@ -87,7 +88,7 @@ bool app_speech_start(void){
 }
 bool app_speech_say(const char *text){
     if(!worker)return false;
-    portENTER_CRITICAL(&lock);bool ok=speech_model_submit(&model,text,(uint64_t)esp_timer_get_time()/1000);
+    portENTER_CRITICAL(&lock);bool ok=!capture_owned && speech_model_submit(&model,text,(uint64_t)esp_timer_get_time()/1000);
     if(ok){view.pending=true;if(view.state!=SPEECH_PLAYING && view.state!=SPEECH_STOPPING)view.state=SPEECH_WAITING;view.error=0;++view.revision;}
     portEXIT_CRITICAL(&lock);if(ok)xTaskNotifyGive(worker);return ok;
 }
@@ -97,3 +98,10 @@ void app_speech_stop(void){
     portEXIT_CRITICAL(&lock);if(worker)xTaskNotifyGive(worker);
 }
 void app_speech_snapshot(app_speech_snapshot_t *out){portENTER_CRITICAL(&lock);*out=view;portEXIT_CRITICAL(&lock);}
+
+bool app_speech_capture_acquire(void){
+ portENTER_CRITICAL(&lock);bool ok=!capture_owned && !model.pending && view.state!=SPEECH_PLAYING && view.state!=SPEECH_STOPPING;
+ if(ok)capture_owned=true;
+ portEXIT_CRITICAL(&lock);return ok;
+}
+void app_speech_capture_release(void){portENTER_CRITICAL(&lock);capture_owned=false;portEXIT_CRITICAL(&lock);}

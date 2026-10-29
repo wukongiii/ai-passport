@@ -98,6 +98,11 @@ run_static_checks() {
         main/score/chinese_eight.c main/score/score_controller.c main/ui/app_actions.c main/ui/app_layout.c \
         -o "${test_dir}/test_ai_interaction"
     "${test_dir}/test_ai_interaction"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/game_voice_stubs -Itests/speech_stubs -Itests/bsp_stubs \
+        -DportMAX_DELAY=0xffffffffU tests/test_game_voice.c main/ai/voice_capture.c \
+        main/ai/ai_json.c main/ai/ai_session.c main/ai/ai_provider.c main/ai/ai_ark.c main/ui/app_actions.c \
+        -lm -o "${test_dir}/test_game_voice"
+    "${test_dir}/test_game_voice"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         -Itests/score_stubs -Itests/bsp_stubs \
         tests/test_score_store.c main/score/score.c main/score/score_config.c main/score/chinese_eight.c main/ui/app_actions.c main/ui/app_layout.c \

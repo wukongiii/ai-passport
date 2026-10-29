@@ -9,3 +9,8 @@ bool app_speech_start(void);
 bool app_speech_say(const char *text);
 void app_speech_stop(void);
 void app_speech_snapshot(app_speech_snapshot_t *);
+
+/* Worker-side codec lease. Acquire only after playback has stopped; while held,
+ * new playback is refused. Caller stops reads/sleeps codec before release. */
+bool app_speech_capture_acquire(void);
+void app_speech_capture_release(void);

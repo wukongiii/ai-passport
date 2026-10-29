@@ -58,4 +58,17 @@ static bool decode(ai_json_t *workspace,const char *body,size_t size,ai_reply_t 
     }else return false;
     *out=reply;return true;
 }
-const ai_model_adapter_t ai_ark_adapter={"doubao","https://ark.cn-beijing.volces.com/api/v3/chat/completions",encode,decode};
+static bool audio_parts(ai_json_t *workspace,const ai_model_request_t *r,char *head,size_t head_capacity,char *tail,size_t tail_capacity){
+    if(!r||!r->input||!*r->input||strlen(r->input)>=AI_INPUT_CAPACITY)return false;
+    const char marker[]="__DEVICE_AUDIO_INPUT__";
+    ai_model_request_t audio=*r;audio.input=marker;
+    if(!encode(workspace,&audio,head,head_capacity))return false;
+    char *at=strstr(head,"{\"role\":\"user\",\"content\":\"__DEVICE_AUDIO_INPUT__\"}");if(!at)return false;
+    const char *after=at+strlen("{\"role\":\"user\",\"content\":\"__DEVICE_AUDIO_INPUT__\"}");
+    const char *suffix="\",\"format\":\"wav\"}},{\"type\":\"text\",\"text\":";
+    ai_json_writer_t w;ai_json_writer(&w,tail,tail_capacity);ai_json_write(&w,suffix);ai_json_quote(&w,r->input);
+    ai_json_write(&w,"}]}");ai_json_write(&w,after);if(!w.ok)return false;
+    *at=0;size_t used=strlen(head);ai_json_writer_t h={head,head_capacity,used,true};
+    ai_json_write(&h,"{\"role\":\"user\",\"content\":[{\"type\":\"input_audio\",\"input_audio\":{\"data\":\"");return h.ok;
+}
+const ai_model_adapter_t ai_ark_adapter={"doubao","https://ark.cn-beijing.volces.com/api/v3/chat/completions",encode,audio_parts,decode};
