@@ -25,10 +25,10 @@ static const app_module_ops_t ops = {enter, leave, bindings, input, tick, create
 int main(void) {
     fake_t f = {.allow_enter = true, .allow_leave = true};
     const app_module_t modules[] = {
-        {1, "Eight", "real game", APP_ENTRY_GAME, &ops, &f, APP_ART_EIGHT},
-        {2, "Chase", "mock", APP_ENTRY_GAME, NULL, NULL, APP_ART_CHASE},
-        {3, "Settings", "mock", APP_ENTRY_SETTINGS, NULL, NULL, APP_ART_SETTINGS},
-        {4, "Voice", "mock", APP_ENTRY_SERVICE, NULL, NULL, APP_ART_VOICE},
+        {1, "Eight", "real game", APP_ENTRY_GAME, &ops, &f, APP_ART_EIGHT, NULL},
+        {2, "Chase", "mock", APP_ENTRY_GAME, NULL, NULL, APP_ART_CHASE, NULL},
+        {3, "Settings", "mock", APP_ENTRY_SETTINGS, NULL, NULL, APP_ART_SETTINGS, NULL},
+        {4, "Voice", "mock", APP_ENTRY_SERVICE, NULL, NULL, APP_ART_VOICE, NULL},
     };
     app_container_t app;
     assert(!app_container_init(&app, modules, 0, APP_ROTATION_270));

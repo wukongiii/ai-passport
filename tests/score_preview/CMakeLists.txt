@@ -13,5 +13,5 @@ add_executable(preview ../../main/ai/ai_config.c ../../main/app/app_voice.c ../.
     ../../assets/fonts/score_font_14.c ../../assets/fonts/score_font_16.c ../../assets/fonts/score_font_inventory.c
     ../../components/bsp/src/bsp_display_rounding.c)
 target_include_directories(preview PRIVATE ../../main ../bsp_stubs ../../components/bsp/src)
-target_sources(preview PRIVATE ../../main/games/game_preferences.c)
+target_sources(preview PRIVATE ../../main/games/game_preferences.c ../../main/games/eight_ai.c ../../main/ai/ai_json.c)
 target_link_libraries(preview PRIVATE lvgl)

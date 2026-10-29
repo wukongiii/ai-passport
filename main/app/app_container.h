@@ -7,6 +7,7 @@ typedef struct {
     unsigned count, focus;
     app_page_t page;
     app_rotation_t rotation;
+    uint32_t activation; // Invalidates in-flight AI on every successful enter/leave.
 } app_container_t;
 
 bool app_container_init(app_container_t *app, const app_module_t *modules,
@@ -17,3 +18,6 @@ void app_container_input(app_container_t *app, unsigned slot, app_gesture_t gest
 /* Tick every registered module, including inactive modules with pending saves. */
 bool app_container_tick(app_container_t *app, int64_t now);
 void app_modules_init(const app_module_t *modules, unsigned count);
+
+/* Only an active real game exposes its optional AI capability. */
+ai_game_target_t app_container_ai_target(const app_container_t *app);

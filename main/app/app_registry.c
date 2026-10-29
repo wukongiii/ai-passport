@@ -9,8 +9,8 @@ const app_module_t *app_registry(unsigned *count) {
     static app_module_t modules[5];
     if (!modules[0].id) {
         modules[0] = app_module_eight;
-        modules[1] = (app_module_t){2, TXT_APP_CHASE, TXT_APP_CHASE_DESC, APP_ENTRY_GAME, NULL, NULL, APP_ART_CHASE};
-        modules[2] = (app_module_t){3, TXT_APP_SNOOKER, TXT_APP_SNOOKER_DESC, APP_ENTRY_GAME, NULL, NULL, APP_ART_SNOOKER};
+        modules[1] = (app_module_t){2, TXT_APP_CHASE, TXT_APP_CHASE_DESC, APP_ENTRY_GAME, NULL, NULL, APP_ART_CHASE, NULL};
+        modules[2] = (app_module_t){3, TXT_APP_SNOOKER, TXT_APP_SNOOKER_DESC, APP_ENTRY_GAME, NULL, NULL, APP_ART_SNOOKER, NULL};
         modules[3] = app_module_settings;
         modules[4] = app_module_voice;
     }

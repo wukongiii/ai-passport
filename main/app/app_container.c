@@ -50,11 +50,11 @@ void app_container_input(app_container_t *app, unsigned slot, app_gesture_t gest
         else if (action == ACTION_OPEN) {
             const app_module_t *m = &app->modules[app->focus];
             if (!m->ops) app->page = APP_PAGE_PLACEHOLDER;
-            else if (m->ops->enter(m->context, app->rotation)) app->page = APP_PAGE_MODULE;
+            else if (m->ops->enter(m->context, app->rotation)) { app->page = APP_PAGE_MODULE; ++app->activation; }
         }
     } else if (action == ACTION_HOME) {
         const app_module_t *m = app_container_active(app);
-        if (!m->ops || m->ops->leave(m->context)) app->page = APP_PAGE_HOME;
+        if (!m->ops || m->ops->leave(m->context)) { app->page = APP_PAGE_HOME; ++app->activation; }
     } else if (app->page == APP_PAGE_MODULE) {
         const app_module_t *m = app_container_active(app);
         const app_module_effect_t effect = m->ops->input(m->context, app->rotation, slot, gesture);
@@ -74,4 +74,11 @@ bool app_container_tick(app_container_t *app, int64_t now) {
 void app_modules_init(const app_module_t *modules, unsigned count) {
     for (unsigned i = 0; i < count; ++i)
         if (modules[i].ops && modules[i].ops->init) modules[i].ops->init(modules[i].context);
+}
+
+ai_game_target_t app_container_ai_target(const app_container_t *app) {
+    if(!app || app->page!=APP_PAGE_MODULE)return (ai_game_target_t){0};
+    const app_module_t *m=app_container_active(app);
+    if(!m || m->kind!=APP_ENTRY_GAME || !m->ai)return (ai_game_target_t){0};
+    return (ai_game_target_t){m->ai,m->context,m->id,app->activation};
 }

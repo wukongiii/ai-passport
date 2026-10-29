@@ -1,5 +1,9 @@
 idf_component_register(
     SRCS "main.c"
+         "ai/ai_json.c"
+         "ai/ai_session.c"
+         "ai/ai_provider.c"
+         "ai/ai_ark.c"
          "ai/ai_config.c"
          "ai/ai_config_store.c"
          "speech/speech_model.c"
@@ -25,6 +29,7 @@ idf_component_register(
          "app/app_carousel_layout.c"
          "../assets/images/launcher/launcher_art.c"
          "games/eight_module.c"
+         "games/eight_ai.c"
          "games/game_preferences.c"
          "games/game_preferences_store.c"
          "score/score.c"

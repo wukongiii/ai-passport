@@ -1,5 +1,6 @@
 #pragma once
 #include <stddef.h>
+#include "../ai/ai_contract.h"
 #include "../ui/app_actions.h"
 #include "../ui/app_layout.h"
 
@@ -34,6 +35,7 @@ typedef struct {
     const app_module_ops_t *ops; // NULL: explicit UI-only placeholder.
     void *context;
     app_art_t artwork; // Presentation metadata, independent of LVGL.
+    const ai_game_ops_t *ai; // Optional owner-task game capability; models never access ops.
 } app_module_t;
 
 const app_module_t *app_registry(unsigned *count);

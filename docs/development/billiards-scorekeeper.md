@@ -860,3 +860,112 @@ hotspot save/restart, on-board rendering and remote model connectivity.
 Verified archive/full SHA-256:
 `build/firmware/73613efed398d27bf0eee8468ae37a05b6e2de3a87114eb9ea5226de26993ce8/`.
 Matching ELF SHA-256: `b51a4246517ca0a0bcfc4bba44352c0c4d44bb863d8f917b2206a8b3cd96c9b6`.
+
+## Game and AI interaction contract
+
+The application registers optional `ai_game_ops_t` capabilities on a game module;
+settings, services and placeholders expose none. The container returns a target
+only for the active real game. `activation` changes after successful entry/exit,
+so a late reply cannot act on a newly entered instance of the same game.
+
+The boundary has three independent responsibilities:
+
+| Layer | Responsibility | Extension point |
+| --- | --- | --- |
+| Game adapter | Rules prompt, copied game context, neutral tools with JSON Schema, argument validation, authoritative execution result | Register `snapshot`, `stamp`, `execute` in `app_module_t.ai` |
+| Session coordinator | One pending request, locally assigned token, 30-second deadline, activation/revision/configuration binding, consume each reply once | `ai_session_begin`, `ai_session_finish`, `ai_session_cancel` |
+| Model adapter | Provider endpoint, body encoding, tool-call/text/clarification decoding | Register an `ai_model_adapter_t` in `ai_model_adapter` |
+
+A game never imports model configuration, provider protocols or network APIs.
+A provider never imports the score core or a particular game. The shared contract
+has only bounded context, instructions, tool schemas, calls, revisions and results.
+Tools are a neutral array of `{name, description, parameters}`; the Ark adapter
+adds its own `type/function` envelope. Reserved `ask_clarification({question})`
+normalizes to a clarification response without invoking the game executor.
+
+```mermaid
+sequenceDiagram
+    participant O as Application owner
+    participant G as Active game
+    participant S as AI session
+    participant W as Model worker
+    O->>S: begin(target, time, snapshot mailbox)
+    S->>G: snapshot: prompt + context + tools + stamps
+    O->>W: immutable snapshot + input + local token
+    W->>W: provider encode, transport, decode
+    W-->>O: queued normalized reply + original token
+    O->>S: finish(current target, token, reply)
+    S->>G: check stamp, validate and execute tool
+    G-->>O: authoritative result and revision change
+```
+
+`begin/finish/cancel`, container access and game callbacks run only on the existing
+application owner task, outside the LVGL lock. Workers never access live games or
+widgets. The caller owns the snapshot mailbox and must keep it immutable until
+the worker finishes; a timeout/cancel does not authorize reusing memory still held
+by a worker. The original local token travels with the worker job, not with model
+generated arguments. A different/old token does not consume a newer pending job.
+Transport failure or an invalid decoded response cancels the matching session.
+A future coordinator must cancel pending work before navigation/model changes,
+use a queue for completion, and render after a successful `changed` result.
+Activation checks additionally reject replies when cancellation is missed.
+
+The first game adapter is Chinese eight-ball. Its context includes game/unit,
+race target, stable player IDs, names, A/B aliases, left/right positions, scores,
+winner, null selected player, undo availability and the undo target scores. The
+rule prompt distinguishes rack wins from ball points and requires clarification
+for ambiguous players. Capability tools are:
+
+| Tool | Arguments | Local behavior |
+| --- | --- | --- |
+| `adjust_score` | `player_id`, `delta` (-1 or +1), `expected_revision` | Resolve stable ID and dispatch the normal score command |
+| `undo_last` | `expected_revision` | Use existing bounded undo history |
+| `get_score` | `expected_revision` | Read authoritative scores; does not save or change revision |
+| `ask_clarification` | `question` | Return text; never alter gameplay |
+
+For example, `adjust_score({"player_id":"p1","delta":1,"expected_revision":7})`
+can increase the left player's rack wins only if the locally captured request is
+still current. Both the local stamp and the tool revision must match; wildcard
+revision, extra/duplicate arguments, unknown players/tools, fractional values,
+underflow and post-win increments are rejected. AI commands share the module's
+manual `dispatch` path, UI feedback, delayed persistence and undo history. Names
+are labels; changing a name invalidates in-flight interpretation without changing
+player identity. New-match/reset operations are not exposed in this first toolset.
+A game subpage refuses AI snapshots/execution while manual settings are open.
+
+The Ark adapter encodes one non-streaming text turn and decodes exactly one text,
+clarification or tool result. Multiple choices/tools, truncation, malformed JSON,
+duplicate keys, embedded NUL, invalid UTF-8 and oversized values are rejected.
+Tool-associated prose is discarded so it cannot claim the operation succeeded.
+Ordinary model text is kept separate from authoritative operation results and
+cannot change game state. Worker credentials are excluded from bodies/snapshots;
+they belong in the future transport's authorization header.
+
+This increment supplies and tests the interfaces, real game execution and Ark
+wire codec. It deliberately does not start an HTTP/audio worker or add a UI trigger:
+no network call, Key readout, microphone upload or new standalone ASR is enabled.
+Those stages can now consume this contract without adding provider details to games.
+
+All buffers are bounded; JSON parsing uses a caller-owned workspace without heap
+allocation. In the 64-bit host test the snapshot is 3600 bytes, parser workspace
+6168 bytes, session 56 bytes, reply 688 bytes and completion 396 bytes. These host
+sizes are not an ESP32 heap measurement. Large mailboxes/workspaces must be static
+or explicitly allocated by the future worker, never placed on the app stack. The
+eight-ball argument parser is owner-only and uses one static workspace. Request
+and response bodies are each limited to 6144 bytes; text input is at most 511 bytes,
+arguments at most 255 bytes, and output text at most 384 bytes, without truncation.
+
+
+Contract validation, 2026-10-30: complete gate Build PASS, Host tests PASS. The
+integration test uses the real container, eight-ball module, score core and Ark
+codec with simulated model responses. It verifies scoring/undo/query persistence,
+unknown/duplicate/invalid arguments, rule rejection, local edit/rename races,
+leave/reentry, cancellation, timeout, duplicate and wrong tokens, text and
+clarification isolation, malformed model responses and bounded JSON handling.
+The same integration passed AddressSanitizer and UndefinedBehaviorSanitizer.
+Finite real-LVGL previews still passed at both landscape rotations (24792-byte
+peak). Device tests NOT RUN; transport, real-model interpretation, microphone,
+board RAM/timing and physical controls remain unverified. No flash or commit.
+Verified archive/full SHA-256:
+`build/firmware/3448c01938b1e542aa8bf2edce6693227e8d2882004df0397327088cc499ef77/`.
+Matching ELF SHA-256: `f5fc27269afe568582ca6ffdfc4e0b7da42b47c04065adf1c0dd1e907e7a7e11`.

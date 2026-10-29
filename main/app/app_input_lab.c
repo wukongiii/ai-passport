@@ -92,4 +92,4 @@ static void render(void *c,const app_module_view_t *v){
     }
 }
 static const app_module_ops_t ops={enter,leave,bindings,input,tick,create,render,NULL,key};
-const app_module_t app_module_input_lab={6,TXT_INPUT_TITLE,TXT_INPUT_DESC,APP_ENTRY_SERVICE,&ops,NULL,APP_ART_SETTINGS};
+const app_module_t app_module_input_lab={6,TXT_INPUT_TITLE,TXT_INPUT_DESC,APP_ENTRY_SERVICE,&ops,NULL,APP_ART_SETTINGS, NULL};

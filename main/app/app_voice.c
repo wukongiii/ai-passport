@@ -184,4 +184,4 @@ static void render(void *c,const app_module_view_t *v){
     else if(state.config.busy)lv_label_set_text(note,TXT_AI_WAIT);
 }
 static const app_module_ops_t ops={enter,leave,bindings,input,tick,create,render,NULL,NULL};
-const app_module_t app_module_voice={5,TXT_APP_VOICE,TXT_APP_VOICE_DESC,APP_ENTRY_SERVICE,&ops,NULL,APP_ART_VOICE};
+const app_module_t app_module_voice={5,TXT_APP_VOICE,TXT_APP_VOICE_DESC,APP_ENTRY_SERVICE,&ops,NULL,APP_ART_VOICE, NULL};
