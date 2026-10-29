@@ -1,5 +1,12 @@
 idf_component_register(
     SRCS "main.c"
+         "app/app_container.c"
+         "app/app_registry.c"
+         "app/app_ui.c"
+         "app/app_carousel.c"
+         "app/app_carousel_layout.c"
+         "../assets/images/launcher/launcher_art.c"
+         "games/eight_module.c"
          "score/score.c"
          "score/score_config.c"
          "score/chinese_eight.c"

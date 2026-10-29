@@ -2,7 +2,6 @@
 #include "score_strings.h"
 #include "score_config.h"
 #include "lvgl.h"
-#include "../ui/app_shell.h"
 #include <stdio.h>
 
 LV_FONT_DECLARE(score_font_16);
@@ -14,7 +13,6 @@ LV_FONT_DECLARE(score_font_16);
 #define GOLD 0xEDC56B
 #define BLUE 0x74C5D9
 
-static app_shell_t s_shell;
 static lv_obj_t *s_screen, *s_board, *s_dialog, *s_battery, *s_race, *s_status, *s_storage;
 static lv_obj_t *s_cards[2], *s_points[2], *s_menu_rows[3];
 static lv_obj_t *s_title, *s_detail, *s_target_hint;
@@ -50,7 +48,7 @@ static void selected(lv_obj_t *o, bool yes, uint32_t color) {
     lv_obj_set_style_border_color(o, lv_color_hex(yes ? color : SURFACE), 0);
 }
 
-bool score_ui_create(void) {
+bool score_ui_create(void *content) {
     /* Validate the same font assigned to every Chinese widget. A missing glyph
      * aborts initialization instead of silently displaying placeholders. */
     extern const uint32_t score_font_codepoints[];
@@ -60,8 +58,7 @@ bool score_ui_create(void) {
         if (!lv_font_get_glyph_dsc(&score_font_16, &glyph, score_font_codepoints[i], 0) ||
             glyph.is_placeholder) return false;
     }
-    app_shell_create(&s_shell, &score_font_16);
-    s_screen = s_shell.content;
+    s_screen = content;
     label(s_screen, 26, 7, 100, TXT_TITLE, &score_font_16, INK);
     s_battery = label(s_screen, 247, 9, 48, "--%", &lv_font_montserrat_14, MUTED);
     s_board = panel(s_screen, 0, 28, 320, 128);
@@ -86,16 +83,11 @@ bool score_ui_create(void) {
     }
     s_status = label(s_screen, 12, 156, 296, TXT_EMPTY, &score_font_16, INK);
     s_storage = label(s_screen, 12, 175, 296, "", &score_font_16, MUTED);
-    lv_screen_load(s_shell.screen);
     return true;
 }
 
 void score_ui_render(const score_session_t *s, const score_controller_t *ui,
-                     int battery, const char *status, const char *storage) {
-    app_bindings_t bindings;
-    score_controller_bindings(ui, s, &bindings);
-    app_shell_render(&s_shell, ui->rotation, &bindings);
-    const int height = app_content_rect(ui->rotation, app_binding_rows(&bindings)).height;
+                     int height, int battery, const char *status, const char *storage) {
     lv_obj_set_height(s_board, height - 68);
     for (unsigned i = 0; i < 2; ++i) {
         lv_obj_set_height(s_cards[i], height - 76);

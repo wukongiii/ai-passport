@@ -44,6 +44,18 @@ run_static_checks() {
         main/score/score_controller.c main/ui/app_actions.c main/ui/app_layout.c -o "${test_dir}/test_score"
     "${test_dir}/test_score"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_app_container.c main/app/app_container.c main/ui/app_actions.c \
+        main/ui/app_layout.c -o "${test_dir}/test_app_container"
+    "${test_dir}/test_app_container"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_app_carousel_layout.c main/app/app_carousel_layout.c -o "${test_dir}/test_app_carousel_layout"
+    "${test_dir}/test_app_carousel_layout"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/bsp_stubs \
+        tests/test_eight_module.c main/games/eight_module.c main/score/score.c \
+        main/score/score_config.c main/score/chinese_eight.c main/score/score_controller.c \
+        main/ui/app_actions.c main/ui/app_layout.c -o "${test_dir}/test_eight_module"
+    "${test_dir}/test_eight_module"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         -Itests/score_stubs -Itests/bsp_stubs \
         tests/test_score_store.c main/score/score.c main/score/score_config.c main/score/chinese_eight.c main/ui/app_actions.c main/ui/app_layout.c \
         -o "${test_dir}/test_score_store"

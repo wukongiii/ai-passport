@@ -70,7 +70,8 @@ Regular, 16 px, 4 bpp uncompressed, without kerning; license: SIL OFL 1.1
 `Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf`, SHA-256
 `2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b`.
 The full source font and converter cache stay under ignored `build/font-tools/`.
-Regenerate after changing `main/score/score_strings.h`:
+Regenerate after changing `main/score/score_strings.h`, `main/ui/app_strings.h`
+or `main/app/app_strings.h`:
 
 ```bash
 npm install --prefix build/font-tools --no-audit --no-fund lv_font_conv@1.5.3
@@ -80,3 +81,20 @@ python3 tools/generate_score_font.py --font build/font-tools/NotoSansCJKsc-Regul
 The generator verifies the source hash. The application compiles both generated
 C files and validates every required code point at startup. The subset does not
 cover arbitrary player names. Physical Chinese rendering remains device acceptance.
+
+### Launcher illustrations
+
+`images/launcher/{eight,chase,snooker,settings,voice}.png` are original geometric
+illustrations authored for this application; they follow the repository license.
+`images/launcher/launcher_art.c` embeds the same five 176 x 96 images as RGB565
+constants (168960 pixel bytes total). No full-image decompression is needed.
+Regenerate both editable generator output and firmware pixels with Pillow 13.0.0
+and the documented OFL font source (digits only):
+
+```bash
+python3 -m pip install --target build/art-tools Pillow==13.0.0
+PYTHONPATH=build/art-tools python3 tools/generate_launcher_art.py --font build/font-tools/NotoSansCJKsc-Regular.otf
+```
+
+The source is `tools/generate_launcher_art.py`. The firmware and host preview
+compile the generated C once; PNG files are review assets, not runtime decodes.

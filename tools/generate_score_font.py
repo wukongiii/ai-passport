@@ -13,7 +13,7 @@ SOURCE_COMMIT = "f8d157532fbfaeda587e826d4cd5b21a49186f7c"
 
 def codepoints():
     text = "\n".join((ROOT / f).read_text() for f in
-                     ("main/score/score_strings.h", "main/ui/app_strings.h"))
+                     ("main/score/score_strings.h", "main/ui/app_strings.h", "main/app/app_strings.h"))
     strings = re.findall(r'^#define\s+TXT_\w+\s+"([^"]*)"', text, re.M)
     return sorted(set(map(ord, "".join(strings))) | set(range(32, 127)))
 

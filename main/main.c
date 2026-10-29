@@ -4,12 +4,11 @@
 #include "bsp_display.h"
 #include "bsp_pins.h"
 #include "key_guard.h"
-#include "score/score.h"
-#include "score/score_controller.h"
+#include "app/app_container.h"
+#include "app/app_ui.h"
 #include "score/score_input.h"
 #include "score/score_store.h"
 #include "score/score_strings.h"
-#include "score/score_ui.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
@@ -24,8 +23,7 @@ static QueueHandle_t s_input_queue;
 static volatile bool s_input_ready;
 static volatile bool s_input_overflow;
 static key_guard_t s_key_guard;
-static score_session_t s_session;
-static score_controller_t s_controller;
+static app_container_t s_app;
 
 typedef struct { bsp_btn_t button; bsp_btn_ev_t event; } input_event_t;
 
@@ -41,28 +39,14 @@ static void on_key(bsp_btn_t button, bsp_btn_ev_t event, void *user) {
     if (xQueueSend(s_input_queue, &input, 0) != pdTRUE) s_input_overflow = true;
 }
 
-static const char *command_status(const score_command_t *c, score_result_t result) {
-    if (result == SCORE_NO_HISTORY) return TXT_NO_HISTORY;
-    if (result != SCORE_OK) return TXT_REJECTED;
-    if (c->type == SCORE_CMD_UNDO) return TXT_UNDONE;
-    if (c->type == SCORE_CMD_NEW_MATCH) return TXT_NEW_STARTED;
-    if (c->amount < 0) return c->player == 0 ? TXT_SUBBED_ONE : TXT_SUBBED_TWO;
-    return c->player == 0 ? TXT_AWARDED_ONE : TXT_AWARDED_TWO;
-}
-
 void app_main(void) {
-    ESP_LOGI(TAG, "Offline Chinese eight-ball scorekeeper");
-    score_session_init(&s_session);
-    const score_store_status_t store = score_store_open(&s_session);
-    bool preserve_unknown_record = store == SCORE_STORE_INVALID || store == SCORE_STORE_UNAVAILABLE;
-    bool dirty = false;
-    const char *storage = store == SCORE_STORE_UNAVAILABLE ? TXT_STORE_FAILED :
-                          store == SCORE_STORE_INVALID ? TXT_RECORD_BAD :
-                          store == SCORE_STORE_LOADED ? TXT_SAVED : "";
-    const char *status = store == SCORE_STORE_LOADED ? TXT_RESTORED : TXT_EMPTY;
-    score_controller_init(&s_controller, &s_session);
-
-    const score_store_status_t ui_store = score_store_load_rotation(&s_controller.rotation);
+    ESP_LOGI(TAG, "Billiards application container");
+    unsigned count;
+    const app_module_t *modules = app_registry(&count);
+    app_modules_init(modules, count);
+    app_rotation_t rotation = APP_ROTATION_270;
+    const score_store_status_t ui_store = score_store_load_rotation(&rotation);
+    if (!app_container_init(&s_app, modules, count, rotation)) return;
     bool ui_dirty = false;
     int64_t last_ui_save = 0;
     const char *ui_storage = ui_store == SCORE_STORE_INVALID ? TXT_UI_BAD :
@@ -70,9 +54,9 @@ void app_main(void) {
     if (bsp_display_init() != ESP_OK) return;
     lv_display_t *display = bsp_lvgl_init();
     if (!display || !bsp_lvgl_lock(1000)) return;
-    lv_display_set_rotation(display, s_controller.rotation == APP_ROTATION_90 ?
+    lv_display_set_rotation(display, s_app.rotation == APP_ROTATION_90 ?
                             LV_DISPLAY_ROTATION_90 : LV_DISPLAY_ROTATION_270);
-    const bool ui_ready = score_ui_create();
+    const bool ui_ready = app_ui_create();
     bsp_lvgl_unlock();
     if (!ui_ready) {
         ESP_LOGE(TAG, "UI font coverage check failed");
@@ -101,12 +85,11 @@ void app_main(void) {
     int battery = battery_ready ? bsp_battery_soc() : -1;
     int64_t last_battery = esp_timer_get_time();
     int64_t last_input = last_battery;
-    int64_t last_save = 0;
     bool blanked = false;
     score_input_guard_t wake_guard = {0};
     uint8_t brightness = 80;
     if (bsp_lvgl_lock(500)) {
-        score_ui_render(&s_session, &s_controller, battery, status, *ui_storage ? ui_storage : storage);
+        app_ui_render(&s_app, battery, ui_storage);
         bsp_lvgl_unlock();
     }
     ESP_LOGI(TAG, "Ready, free heap=%u largest=%u", (unsigned)esp_get_free_heap_size(),
@@ -130,21 +113,12 @@ void app_main(void) {
                 (input.event == BSP_BTN_CLICK || input.event == BSP_BTN_DOUBLE || input.event == BSP_BTN_LONG)) {
                 const unsigned hardware = input.button == BSP_BTN_UP ? 0 :
                                           input.button == BSP_BTN_DOWN ? 1 : 2;
-                const unsigned slot = app_key_from_hardware(s_controller.rotation, hardware);
+                const unsigned slot = app_key_from_hardware(s_app.rotation, hardware);
                 const app_gesture_t gesture = input.event == BSP_BTN_LONG ? APP_GESTURE_LONG :
                     input.event == BSP_BTN_DOUBLE ? APP_GESTURE_DOUBLE : APP_GESTURE_SHORT;
-                const app_rotation_t before_rotation = s_controller.rotation;
-                score_command_t command;
-                if (score_controller_input(&s_controller, &s_session, slot, gesture, &command)) {
-                    const score_result_t result = score_dispatch(&s_session, &command);
-                    status = command_status(&command, result);
-                    if (result == SCORE_OK) {
-                        if (command.type == SCORE_CMD_NEW_MATCH) preserve_unknown_record = false;
-                        dirty = true;
-                        last_save = 0;
-                    }
-                }
-                if (s_controller.rotation != before_rotation) {
+                const app_rotation_t before_rotation = s_app.rotation;
+                app_container_input(&s_app, slot, gesture);
+                if (s_app.rotation != before_rotation) {
                     ui_dirty = true;
                     last_ui_save = 0;
                 }
@@ -153,17 +127,12 @@ void app_main(void) {
         const int64_t now = esp_timer_get_time();
         if (ui_dirty && (last_ui_save == 0 || now - last_ui_save >= 5000000)) {
             last_ui_save = now;
-            ui_dirty = score_store_save_rotation(s_controller.rotation) != ESP_OK;
+            ui_dirty = score_store_save_rotation(s_app.rotation) != ESP_OK;
             ui_storage = ui_dirty ? TXT_UI_FAILED : "";
             render = true;
         }
-        if (dirty && !preserve_unknown_record && (last_save == 0 || now - last_save >= 5000000)) {
-            last_save = now;
-            const esp_err_t error = score_store_save(&s_session);
-            dirty = error != ESP_OK;
-            storage = dirty ? TXT_SAVING_FAILED : TXT_SAVED;
-            render = true;
-        }
+        // Inactive games still get persistence retries, outside the UI lock.
+        if (app_container_tick(&s_app, now)) render = true;
         if (now - last_battery >= 30000000) {
             battery = battery_ready ? bsp_battery_soc() : -1;
             last_battery = now;
@@ -178,14 +147,12 @@ void app_main(void) {
             blanked = brightness == 0;
         }
         if (s_input_overflow) {
-            status = TXT_INPUT_BUSY;
+            ESP_LOGW(TAG, "Input queue overflow");
             s_input_overflow = false;
             render = true;
         }
         if (render && bsp_lvgl_lock(500)) {
-            const int winner = score_winner(&s_session.state);
-            const char *message = winner < 0 ? status : winner == 0 ? TXT_WINNER_ONE : TXT_WINNER_TWO;
-            score_ui_render(&s_session, &s_controller, battery, message, *ui_storage ? ui_storage : storage);
+            app_ui_render(&s_app, battery, ui_storage);
             bsp_lvgl_unlock();
         }
     }

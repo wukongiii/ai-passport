@@ -65,7 +65,8 @@ ASCII 生成。字体为 Noto Sans CJK SC Regular，16 px，4 bpp、不压缩、
 `Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf`，SHA-256：
 `2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b`。
 完整源字体和转换器缓存位于被忽略的 `build/font-tools/`。
-修改 `main/score/score_strings.h` 后重新生成：
+修改 `main/score/score_strings.h`、`main/ui/app_strings.h` 或
+`main/app/app_strings.h` 后重新生成：
 
 ```bash
 npm install --prefix build/font-tools --no-audit --no-fund lv_font_conv@1.5.3
@@ -74,3 +75,18 @@ python3 tools/generate_score_font.py --font build/font-tools/NotoSansCJKsc-Regul
 
 生成器校验源哈希。应用编译两个生成 C 文件，启动时校验所有所需码点。
 此子集不覆盖任意球员姓名；实际中文渲染仍需设备验收。
+
+### 大厅插画
+
+`images/launcher/{eight,chase,snooker,settings,voice}.png` 是为本应用创作的原创几何
+插画，遵循仓库许可证。`images/launcher/launcher_art.c` 将相同五张 176 x 96 图片
+嵌入为 RGB565 常量，像素共 168960 字节，无需整图解压。使用 Pillow 13.0.0 与
+已记录的 OFL 字体源（仅数字）重新生成预览图和固件像素：
+
+```bash
+python3 -m pip install --target build/art-tools Pillow==13.0.0
+PYTHONPATH=build/art-tools python3 tools/generate_launcher_art.py --font build/font-tools/NotoSansCJKsc-Regular.otf
+```
+
+源文件为 `tools/generate_launcher_art.py`。固件与主机预览各编译生成的 C 一次；
+PNG 用于审阅，运行时不解码 PNG。

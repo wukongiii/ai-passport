@@ -2,6 +2,6 @@
 #include "score_controller.h"
 
 /* Caller holds the BSP LVGL lock. UI owns one persistent object tree. */
-bool score_ui_create(void);
+bool score_ui_create(void *content);
 void score_ui_render(const score_session_t *session, const score_controller_t *controller,
-                     int battery, const char *status, const char *storage_status);
+                     int content_height, int battery, const char *status, const char *storage_status);

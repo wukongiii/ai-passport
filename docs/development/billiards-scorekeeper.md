@@ -2,8 +2,9 @@
 
 # Billiards Scorekeeper
 
-This branch starts an offline Chinese eight-ball scoreboard, replacing the
-hardware-test startup with its own 320 x 240 landscape UI. Original demo sources
+This branch starts a landscape game launcher, with Chinese eight-ball as its
+first functional module, replacing the hardware-test startup with its own
+320 x 240 UI. Original demo sources
 remain as references but are not linked into the application. The 8 MB partition
 layout is unchanged. Chase scoring, snooker, networking and AI speech are future
 increments; they are not implemented in this checkpoint.
@@ -91,9 +92,14 @@ migrate matches. Changing bounds requires a stored-record compatibility review.
 - `chinese_eight.c`: validation, reducer and winner rule; accepts one-frame +1/-1
   adjustments and legacy frame-award commands, rejecting unsupported operations.
 - `score_controller.c`: pages and action registration/dispatch.
-- `score_ui.c`: application LVGL presentation using the shared action shell.
-- `score_store.c`: NVS adapter; `main.c`: sole session owner, input queue,
-  storage/retries, battery polling, dimming and LVGL synchronization.
+- `score_ui.c`: game content widgets mounted inside the container-owned shell.
+- `score_store.c`: backward-compatible NVS adapter.
+- `games/eight_module.c`: eight-ball session owner, rule/controller adapter,
+  initialization, command handling and persistence retries.
+- `app/app_container.c`, `app_registry.c`: module registry, entry/exit and routing.
+- `app/app_ui.c`: shared shell and single mounted content tree.
+- `main.c`: hardware/input owner, shared rotation persistence, battery, dimming
+  and LVGL synchronization.
 
 Add a stable rule descriptor and configuration for another sport, with its
 controller/presentation and tests. Signed points do not implement future rules;
@@ -127,7 +133,8 @@ Fixed strings are inventoried in `score_strings.h` and `ui/app_strings.h`.
 the licensed 16 px subset. Startup checks every required glyph against the actual
 widget font and rejects placeholders. Arbitrary names/ASR output are unsupported.
 
-The normal gate tests rules, boundaries, winner correction, undo, stale commands,
+The normal gate tests container navigation/lifecycle, mock isolation, module
+re-entry and inactive save retries, plus rules, boundaries, winner correction, undo, stale commands,
 configuration, old record restore, corruption, NVS failures, wake ordering,
 physical-input conversion, semantic continuity and landscape BSP masks.
 
@@ -139,9 +146,10 @@ cmake --build build/score-render -j 8
 (cd build/score-render && ./preview)
 ```
 
-It exports five pages at both rotations and synthetic nine-action shell previews,
-then exercises 500 transitions. It uses the device's 32 KB LVGL pool; observed
-peak was 23960 bytes with 6392 bytes free. Host rendering cannot prove physical
+It exports game pages, launcher and placeholders at both rotations, plus a
+nine-action shell preview and one entry/scoring/exit path. It does not run
+repetition/stress loops by default, as requested. It uses the device's 32 KB LVGL
+pool; current key-screen previews observed a peak of 26048 bytes. Host rendering cannot prove physical
 key placement, screen quality, timing or power consumption.
 
 ## Accepted stage checkpoint
@@ -170,3 +178,107 @@ The serial port was closed. Firmware, debug bundles and raw logs remain local
 and ignored. A merged image at `0x0` may reset NVS; preserving state requires a
 compatible segmented update, not whole-chip erase. This checkpoint commit does
 not rebuild or reflash the accepted firmware.
+
+## Launcher increment
+
+Boot now always opens the game hall, with left Previous, middle Enter, right
+Next. Select Eight-ball to resume the existing session. Chase, Snooker, App
+Settings and AI/Voice are explicit UI-only placeholders; they can be entered
+and exited but do not change data, provision networks or start services.
+On the eight-ball board, middle hold returns to the hall. Existing subpage
+middle-hold Back is retained; first return to the board to exit. Returning to the
+hall and re-entering preserves score/history and pending saves.
+
+`app_module.h` defines descriptors (stable ID/title/description/kind/context) and
+callbacks: optional owner startup init, enter, leave, bindings, input, optional
+tick, UI create and UI render. `app_registry.c` is the single module list;
+`games/eight_module.c` supplies the real eight-ball descriptor. A future game
+implements the callbacks and adds its descriptor to that list; it does not
+modify `main.c` or the launcher renderer. A NULL ops pointer explicitly declares
+a placeholder. Container-reserved action IDs are 65000 and above.
+
+Owner callbacks run outside the LVGL lock and must not touch widgets. UI create /
+render run inside it. Leave must stop all UI producers and return true before
+the container destroys content; a failed leave keeps the game visible. There is
+only one mounted content tree and one shell. Module tick runs even when the game
+is inactive so failed saves are retried. Initialization loads legacy eight-ball
+NVS once without rendering or starting a match. Neither menu browsing nor mocks
+write match data.
+
+The container owns current orientation, navigation and the application-level
+entry points. Eight-ball reports confirmed direction changes as an effect to the
+container; the existing UI preference blob/namespace remains unchanged. App
+Settings is a mock this increment, so direction adjustment temporarily remains
+inside eight-ball. The AI/Voice entry and service kind establish navigation
+placement only: no ASR/network service API or implementation is claimed here.
+Global settings/service extraction can follow after this minimal container.
+
+Host checks cover duplicate registration, failed entry/exit, nested Back vs Home,
+placeholder isolation, inactive tick, eight-ball adapter re-entry and old saved
+race restoration. Actual LVGL previews mount/unmount the real adapter once for
+entry/scoring/exit and cover each important screen without stress loops.
+No new commit or push is implied by this increment.
+
+Validation on 2026-10-29:
+
+- Build: PASS, complete gate with ESP-IDF 5.5.3 and verified debug archive.
+- Host tests: PASS, including container/adapter logic and key-screen previews.
+- Device tests: PASS for application-write hash verification and an 18-second
+  startup observation only; physical interaction and appearance await user checks.
+- Unverified: hall navigation, entry/return, score retention and both orientations
+  on the physical device.
+
+Verified local archive:
+`build/firmware/7d9c7717ca4d6c05493e47eb9329f27df1d15fe151da3f4bf19b4bd35b5f8c3f/`.
+
+- Full-image SHA-256: `7d9c7717ca4d6c05493e47eb9329f27df1d15fe151da3f4bf19b4bd35b5f8c3f`
+- Matching ELF SHA-256: `ca0ebf3055aa3dee1f0ff13ea157c0a8538a235cf419190674d4c12353b34ef7`
+
+The partition table matches the accepted checkpoint. Under the standing flash
+authorization, only the verified 844000-byte application was written at
+`0x10000`; NVS was not overwritten. Startup reached Ready with 214868 bytes free
+heap and a 114688-byte largest block. No panic/assert/reset loop was observed,
+and the serial port was closed.
+
+## Illustrated carousel
+
+The hall presents a horizontal carousel instead of list rows. Each registered
+entry selects artwork through LVGL-independent `artwork` metadata. The center
+card shows the image and title at full size; adjacent cards are smaller and
+dimmer. Previous/Next uses a 220 ms eased slide with image/card scaling. The
+existing three-button hints, semantic colors, wrap navigation and middle Enter
+remain unchanged. Selection takes effect immediately, including Enter during
+an animation. Fast reversals rebase the current offset without queuing effects.
+
+`app_carousel` owns five reusable card widgets and one finite LVGL animation.
+It cancels its animation before the container deletes content; idle cards have
+no continuous animation. Pure geometry and wrap direction live in
+`app_carousel_layout` and have focused host checks. Preview coverage includes
+both rotations, an intermediate frame, a reversal, wrap, and leaving during a
+transition; there are no repeated stress cycles.
+
+Five original 176 x 96 RGB565 illustrations use 168960 bytes of Flash pixel
+storage. They are read directly without a full-image decoder or new framebuffer.
+The source generator and PNG previews are under the documented assets workflow.
+The device still uses a 32 KB LVGL pool. Host previews establish layout and
+callback safety only; animation smoothness and readability require the device.
+
+Carousel validation, 2026-10-29:
+
+- Build: PASS, complete ESP-IDF 5.5.3 gate; application 1014656 bytes.
+- Host tests: PASS, focused geometry/routing tests and finite LVGL previews;
+  observed peak pool usage 26048 bytes, final free pool 7944 bytes.
+- Device tests: PASS for write-hash verification and 18-second startup only.
+- Unverified: physical animation frame rate, appearance and rapid button switching.
+
+Verified archive:
+`build/firmware/d211c8dc88b47fcc2fe7284cbe8b783f60ab0a48159d2fb7617021a6c5dda874/`.
+Full-image SHA-256: `d211c8dc88b47fcc2fe7284cbe8b783f60ab0a48159d2fb7617021a6c5dda874`.
+Matching ELF SHA-256: `b54fae49a6925968ad56d8a29226440cc2e705ebba79041e8c77bd3029c2d579`.
+Only the verified application was written at `0x10000`, with the unchanged
+partition table and no NVS overwrite. Startup reached Ready, free heap 214772
+bytes, largest block 114688 bytes, with no observed panic/assert/reset loop.
+Serial observation ended and the port was closed. No commit or push was made.
+
+The user accepted the carousel appearance and functionality on 2026-10-29 and
+requested a local checkpoint commit. No push or release was requested.
