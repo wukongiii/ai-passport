@@ -48,6 +48,12 @@ run_static_checks() {
         main/ui/app_layout.c -o "${test_dir}/test_app_container"
     "${test_dir}/test_app_container"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_app_settings.c main/app/app_settings_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_app_settings"
+    "${test_dir}/test_app_settings"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/score_stubs -Itests/bsp_stubs \
+        tests/test_app_preferences_store.c main/app/app_preferences_store.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_app_preferences_store"
+    "${test_dir}/test_app_preferences_store"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_app_carousel_layout.c main/app/app_carousel_layout.c -o "${test_dir}/test_app_carousel_layout"
     "${test_dir}/test_app_carousel_layout"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/bsp_stubs \

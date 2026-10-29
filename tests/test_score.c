@@ -212,16 +212,13 @@ static void physical_key_actions(void) {
         assert(press(&ui, &s, app_key_from_hardware(ui.rotation, hardware[r][0]), APP_GESTURE_LONG));
         assert(s.state.points[0] == 0 && s.state.points[1] == 1);
         press(&ui, &s, 1, APP_GESTURE_SHORT);
-        ui.settings_focus = 2;
-        press(&ui, &s, 1, APP_GESTURE_SHORT);
-        assert(ui.page == SCORE_PAGE_DIRECTION);
-        press(&ui, &s, r == 0 ? 2 : 0, APP_GESTURE_SHORT);
-        assert(ui.rotation == rotations[r]); // Selection alone does not apply.
-        press(&ui, &s, 1, APP_GESTURE_SHORT); // Middle always confirms.
-        assert(ui.rotation == rotations[1-r]);
+        press(&ui, &s, 0, APP_GESTURE_SHORT);
+        assert(ui.settings_focus == 1); // Only New match and Undo remain here.
+        press(&ui, &s, 2, APP_GESTURE_SHORT);
+        assert(ui.settings_focus == 0 && ui.rotation == rotations[r]);
         press(&ui, &s, 1, APP_GESTURE_LONG);
         assert(ui.page == SCORE_PAGE_BOARD);
-        assert(press(&ui, &s, app_key_from_hardware(ui.rotation, hardware[1-r][2]), APP_GESTURE_LONG));
+        assert(press(&ui, &s, app_key_from_hardware(ui.rotation, hardware[r][2]), APP_GESTURE_LONG));
         assert(s.state.points[1] == 0);
     }
 }

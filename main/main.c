@@ -7,7 +7,8 @@
 #include "app/app_container.h"
 #include "app/app_ui.h"
 #include "score/score_input.h"
-#include "score/score_store.h"
+#include "app/app_settings.h"
+#include "esp_app_desc.h"
 #include "score/score_strings.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -44,13 +45,7 @@ void app_main(void) {
     unsigned count;
     const app_module_t *modules = app_registry(&count);
     app_modules_init(modules, count);
-    app_rotation_t rotation = APP_ROTATION_270;
-    const score_store_status_t ui_store = score_store_load_rotation(&rotation);
-    if (!app_container_init(&s_app, modules, count, rotation)) return;
-    bool ui_dirty = false;
-    int64_t last_ui_save = 0;
-    const char *ui_storage = ui_store == SCORE_STORE_INVALID ? TXT_UI_BAD :
-                             ui_store == SCORE_STORE_UNAVAILABLE ? TXT_STORE_FAILED : "";
+    if (!app_container_init(&s_app, modules, count, app_settings_preferences()->rotation)) return;
     if (bsp_display_init() != ESP_OK) return;
     lv_display_t *display = bsp_lvgl_init();
     if (!display || !bsp_lvgl_lock(1000)) return;
@@ -62,7 +57,7 @@ void app_main(void) {
         ESP_LOGE(TAG, "UI font coverage check failed");
         return;
     }
-    bsp_display_backlight(80);
+    bsp_display_backlight(app_settings_preferences()->brightness);
     const bool battery_ready = bsp_battery_init() == ESP_OK;
     // Audio is unused. Suspend the powered codec even if PCM was never opened.
     if (bsp_audio_init() == ESP_OK && bsp_audio_sleep() != ESP_OK)
@@ -83,13 +78,15 @@ void app_main(void) {
     key_guard_sync_released(&s_key_guard, bsp_button_read_mv() >= BSP_BTN_MV_RELEASED_MIN);
     s_input_ready = true;
     int battery = battery_ready ? bsp_battery_soc() : -1;
+    int millivolts = battery_ready ? bsp_battery_mv() : -1;
+    app_settings_device_info(battery,millivolts,esp_app_get_description()->version);
     int64_t last_battery = esp_timer_get_time();
     int64_t last_input = last_battery;
     bool blanked = false;
     score_input_guard_t wake_guard = {0};
-    uint8_t brightness = 80;
+    uint8_t brightness = app_settings_preferences()->brightness;
     if (bsp_lvgl_lock(500)) {
-        app_ui_render(&s_app, battery, ui_storage);
+        app_ui_render(&s_app, battery, "");
         bsp_lvgl_unlock();
     }
     ESP_LOGI(TAG, "Ready, free heap=%u largest=%u", (unsigned)esp_get_free_heap_size(),
@@ -102,7 +99,7 @@ void app_main(void) {
             if (blanked) {
                 blanked = false;
                 wake_guard = (score_input_guard_t){ .swallowing = true };
-                brightness = 80;
+                brightness = app_settings_preferences()->brightness;
                 bsp_display_backlight(brightness);
             }
             score_input_event_t event = input.event == BSP_BTN_PRESS ? SCORE_INPUT_PRESS :
@@ -116,31 +113,24 @@ void app_main(void) {
                 const unsigned slot = app_key_from_hardware(s_app.rotation, hardware);
                 const app_gesture_t gesture = input.event == BSP_BTN_LONG ? APP_GESTURE_LONG :
                     input.event == BSP_BTN_DOUBLE ? APP_GESTURE_DOUBLE : APP_GESTURE_SHORT;
-                const app_rotation_t before_rotation = s_app.rotation;
                 app_container_input(&s_app, slot, gesture);
-                if (s_app.rotation != before_rotation) {
-                    ui_dirty = true;
-                    last_ui_save = 0;
-                }
             }
         } else render = false;
         const int64_t now = esp_timer_get_time();
-        if (ui_dirty && (last_ui_save == 0 || now - last_ui_save >= 5000000)) {
-            last_ui_save = now;
-            ui_dirty = score_store_save_rotation(s_app.rotation) != ESP_OK;
-            ui_storage = ui_dirty ? TXT_UI_FAILED : "";
-            render = true;
-        }
         // Inactive games still get persistence retries, outside the UI lock.
         if (app_container_tick(&s_app, now)) render = true;
         if (now - last_battery >= 30000000) {
             battery = battery_ready ? bsp_battery_soc() : -1;
+            millivolts = battery_ready ? bsp_battery_mv() : -1;
+            app_settings_device_info(battery,millivolts,esp_app_get_description()->version);
             last_battery = now;
             render = true;
         }
         // Backlight-only idle policy: full system sleep remains a later feature.
         const int64_t idle = now - last_input;
-        const uint8_t desired = idle >= 120000000 ? 0 : idle >= 30000000 ? 15 : 80;
+        app_preferences_t display_preferences=*app_settings_preferences();
+        display_preferences.brightness=app_settings_preview_brightness();
+        const uint8_t desired = app_preferences_backlight(&display_preferences,idle);
         if (desired != brightness) {
             brightness = desired;
             bsp_display_backlight(brightness);
@@ -152,7 +142,7 @@ void app_main(void) {
             render = true;
         }
         if (render && bsp_lvgl_lock(500)) {
-            app_ui_render(&s_app, battery, ui_storage);
+            app_ui_render(&s_app, battery, "");
             bsp_lvgl_unlock();
         }
     }

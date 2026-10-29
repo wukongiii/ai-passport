@@ -3,6 +3,11 @@ idf_component_register(
          "app/app_container.c"
          "app/app_registry.c"
          "app/app_ui.c"
+         "app/app_preferences.c"
+         "app/app_preferences_store.c"
+         "app/app_settings_model.c"
+         "app/app_settings.c"
+         "ui/app_range.c"
          "app/app_carousel.c"
          "app/app_carousel_layout.c"
          "../assets/images/launcher/launcher_art.c"
@@ -19,5 +24,5 @@ idf_component_register(
          "../assets/fonts/score_font_16.c"
          "../assets/fonts/score_font_inventory.c"
     INCLUDE_DIRS "."
-    REQUIRES bsp esp_hw_support esp_timer nvs_flash
+    REQUIRES bsp esp_hw_support esp_timer nvs_flash esp_app_format
 )

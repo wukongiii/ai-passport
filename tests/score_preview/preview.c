@@ -4,6 +4,8 @@
 #include "score/score_strings.h"
 #include "ui/app_shell.h"
 #include "app/app_ui.h"
+#include "app/app_settings.h"
+#include "app/app_preferences_store.h"
 #include "app/app_strings.h"
 #include "games/eight_module.h"
 #include "score/score_store.h"
@@ -14,6 +16,8 @@
 // In-memory storage adapter for the actual game module in host rendering.
 score_store_status_t score_store_open(score_session_t *s) { (void)s; return SCORE_STORE_EMPTY; }
 esp_err_t score_store_save(const score_session_t *s) { (void)s; return ESP_OK; }
+app_pref_store_status_t app_preferences_load(app_preferences_t *p) { *p=app_preferences_default();return APP_PREF_DEFAULT; }
+esp_err_t app_preferences_save(const app_preferences_t *p) { (void)p; return ESP_OK; }
 static unsigned char frame[320*240*3];
 static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *data) {
     const uint16_t *p=(const uint16_t *)data;
@@ -49,7 +53,7 @@ int main(void) {
         const char *suffix = r ? "90" : "270";
         for (unsigned page = 0; page < SCORE_PAGE_COUNT; ++page) {
             ui.page = (score_page_t)page;
-            ui.target = 35; ui.settings_focus = 2; ui.pending_rotation = ui.rotation;
+            ui.target = 35; ui.settings_focus = 1;
             s.state.target = 35; s.state.points[0] = 10; s.state.points[1] = 9;
             app_bindings_t b; score_controller_bindings(&ui, &s, &b);
             app_shell_render(&game_shell, ui.rotation, &b);
@@ -101,6 +105,35 @@ int main(void) {
     app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,85,"");
     app_container_input(&app,0,APP_GESTURE_SHORT); app_ui_render(&app,85,""); capture("container-eight");
     app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,85,""); capture("return-home");
+    // Settings: finite key-screen coverage and confirmed direction through container.
+    app_settings_device_info(91,4093,"cdd94cd-dirty");
+    app.page=APP_PAGE_HOME; app.focus=3;
+    app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");
+    capture("settings-direction");
+    app_container_input(&app,1,APP_GESTURE_SHORT);
+    app_container_input(&app,2,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");
+    assert(app.rotation==APP_ROTATION_90);
+    app_container_input(&app,2,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");capture("settings-brightness-90");
+    app_container_input(&app,0,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_LONG);
+    assert(app_settings_preferences()->brightness==80 && app_settings_preview_brightness()==80);
+    app_container_input(&app,2,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_SHORT);
+    for(unsigned i=0;i<3;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
+    app_ui_render(&app,91,"");capture("settings-infinity-90");
+    app_container_input(&app,1,APP_GESTURE_SHORT);
+    assert(app_settings_preferences()->dim_seconds==0);
+    app_container_input(&app,2,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-blank-90");
+    app_container_input(&app,2,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-info-90");
+    app_container_input(&app,1,APP_GESTURE_LONG);
+    app.rotation=APP_ROTATION_270; app.focus=3;
+    app_container_input(&app,1,APP_GESTURE_SHORT);
+    app_container_input(&app,2,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-brightness-270");
+    app_container_input(&app,1,APP_GESTURE_LONG);
+    app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,91,"");
     lv_mem_monitor_t memory; lv_mem_monitor(&memory);
     printf("LVGL max used: %u, remaining: %u, key screens rendered\n",
            (unsigned)memory.max_used,(unsigned)memory.free_size);

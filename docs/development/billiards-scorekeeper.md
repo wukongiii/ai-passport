@@ -21,12 +21,11 @@ names, ball groups, turn tracking and handicaps are not implemented.
 | Settings | Previous / execute selection / Next | unassigned / Back / unassigned |
 | Race setup | Decrease / Continue / Increase | unassigned / Back / unassigned |
 | New-match confirmation | Cancel / Confirm / Back | unassigned / Back / unassigned |
-| Direction | Select 270 / Confirm / Select 90 | unassigned / Back / unassigned |
+| Global direction | Select 270 / Confirm / Select 90 | unassigned / Cancel / unassigned |
 
 Board scoring applies immediately without selection or confirmation. Zero cannot
 be decremented. Winning disables additions, but subtraction can correct a
-mistaken winning point and reopen scoring. Settings contains New Match, Undo
-and Direction. New-match clearing requires confirmation and is itself undoable.
+mistaken winning point and reopen scoring. Game settings contains New Match and Undo. New-match clearing requires confirmation and is itself undoable.
 Undo and match data survive restart.
 
 Subpages consistently use middle short for execute/confirm and middle hold for
@@ -44,7 +43,8 @@ use this shared conversion. The user confirmed physical mapping on the device.
 The separate hardware power button is not exposed as a software input and cannot
 serve as a hint toggle with the documented wiring/BSP.
 
-The display dims after 30 seconds and blanks after 120 seconds. The complete
+By default the display dims after 30 seconds and blanks after 120 seconds;
+App Settings can change or disable either timer. The complete
 wake gesture is consumed before scoring resumes. This saves backlight power;
 it is not system sleep and does not establish battery runtime.
 
@@ -98,7 +98,7 @@ migrate matches. Changing bounds requires a stored-record compatibility review.
   initialization, command handling and persistence retries.
 - `app/app_container.c`, `app_registry.c`: module registry, entry/exit and routing.
 - `app/app_ui.c`: shared shell and single mounted content tree.
-- `main.c`: hardware/input owner, shared rotation persistence, battery, dimming
+- `main.c`: hardware/input owner, battery snapshots, global backlight policy
   and LVGL synchronization.
 
 Add a stable rule descriptor and configuration for another sport, with its
@@ -115,16 +115,17 @@ identity still need implementation.
 ## Persistence and failure behavior
 
 Score changes write `billiards/session`: a fixed-width little-endian record with
-version, CRC32 and undo history. Direction changes write the independent versioned
-`billiards/ui` record and do not enter score history. Focus changes do not write
+version, CRC32 and undo history. The legacy direction blob is the versioned
+`billiards/ui` record; global preferences now use `app_settings/config` as
+described below and do not enter score history. Focus changes do not write
 Flash. NVS commits run outside the LVGL lock; failed saves remain pending and
 retry every five seconds, with visible failure status. Uncommitted changes may
 be lost on power loss.
 
 NVS initialization failures never trigger erase. Invalid score records are
 preserved until confirming New Match permits replacement of this application's
-record. Missing/invalid direction records fall back to 270; invalid settings are
-not replaced until the user applies a direction. Other namespaces are not cleared.
+record. Missing/invalid settings fall back to defaults; invalid records are
+not replaced until the user confirms a setting. Other namespaces are not cleared.
 
 ## Fonts and verification
 
@@ -206,10 +207,10 @@ NVS once without rendering or starting a match. Neither menu browsing nor mocks
 write match data.
 
 The container owns current orientation, navigation and the application-level
-entry points. Eight-ball reports confirmed direction changes as an effect to the
+entry points. In that initial increment, eight-ball reported direction changes as an effect to the
 container; the existing UI preference blob/namespace remains unchanged. App
-Settings is a mock this increment, so direction adjustment temporarily remains
-inside eight-ball. The AI/Voice entry and service kind establish navigation
+Settings was a mock in that initial increment; direction adjustment has since
+moved to the global settings module described below. The AI/Voice entry and service kind establish navigation
 placement only: no ASR/network service API or implementation is claimed here.
 Global settings/service extraction can follow after this minimal container.
 
@@ -282,3 +283,58 @@ Serial observation ended and the port was closed. No commit or push was made.
 
 The user accepted the carousel appearance and functionality on 2026-10-29 and
 requested a local checkpoint commit. No push or release was requested.
+
+
+## Global settings and shared ranges
+
+App Settings is now functional: direction, brightness, auto-dim, auto-blank and
+device information. Eight-ball retains only New Match and Undo. Direction is
+confirmed in the global module and propagated to the container; 270/90 key
+mapping and hint placement remain shared. Left/right browse settings, middle
+short press edits/confirms, middle hold cancels editing or returns to the hall
+when browsing. Device information shows firmware version and SOC/mV snapshots
+refreshed by the owner every 30 seconds; this does not calibrate the gauge.
+
+The shared `ui/app_range` widget displays the current value above a rail and
+handle, with minimum/maximum labels below the ends. Brightness uses 20..100%
+in steps of 10. Dim timeout stops are 15/30/60/120 seconds/unlimited; blank
+stops are 60/120/300/600 seconds/unlimited. Unlimited is the far-right stop
+and disables that timer. Ends clamp rather than wrap. A disabled dim timer does
+not disable blanking, or vice versa; blanking takes priority when both expire.
+Brightness previews immediately, but Cancel restores the confirmed value.
+New-match race selection also uses the shared rail with its configured bounds.
+It creates that widget only while its page is visible to fit the 32 KB pool.
+
+`app_preferences` owns defaults, validation, codec and idle policy;
+`app_settings_model` owns button editing independently of ESP-IDF/LVGL.
+The real settings module owns persistence and UI. Confirmed preferences use
+`app_settings/config`: 16-byte AP/version-1 blob, direction code, brightness,
+little-endian dim/blank seconds (zero disables), reserved bytes and XOR check.
+With no new record, the legacy `billiards/ui` direction is read and migrated
+with default brightness/timeouts. The old direction record and match blob are
+not overwritten. Malformed/unreadable records use defaults and show an error;
+only explicit confirmation replaces them. Save failures retry at five-second
+intervals, even after returning to the hall. No browsing/preview writes occur.
+
+Host checks cover codec corruption, timeout boundaries, bounded adjustments,
+cancel/confirm, legacy migration and NVS read/write/commit failures. Finite
+LVGL previews cover range endpoints, infinity, both orientations, device info,
+confirmed direction propagation and cancellation. No stress loop is used.
+Wi-Fi provisioning, AI/voice and hardware sleep remain deferred.
+
+
+Settings build verification, 2026-10-29: Build PASS (complete ESP-IDF 5.5.3 gate),
+Host tests PASS and finite key-screen previews PASS; peak LVGL pool 25440 bytes,
+final free pool 7800 bytes. Verified application size 1033904 bytes.
+Archive: `build/firmware/6e5d6e239cef9b0d4f7039e179c37f02b4d01da71c3764cbf757aff4af9e595e/`.
+Full-image SHA-256: `6e5d6e239cef9b0d4f7039e179c37f02b4d01da71c3764cbf757aff4af9e595e`.
+Matching ELF SHA-256: `b4dfbdfef855138d234651b5f59f6dd755e64b71307c3ebbf08945b61333790f`.
+Under the standing authorization, only the verified application was written at
+`0x10000`, retaining the compatible partition table and existing NVS contents.
+Physical slider operation, brightness preview/cancel, timeout/wake and restart
+persistence remain user/device acceptance checks. No new commit or push.
+
+Device tests: PASS for write-hash verification and 18-second startup only.
+Ready reported 214516 bytes free heap and largest block 114688 bytes; no
+panic/assert/reset loop was observed. Serial closed. Physical checks above
+remain unverified.

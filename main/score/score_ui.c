@@ -1,6 +1,7 @@
 #include "score_ui.h"
 #include "score_strings.h"
 #include "score_config.h"
+#include "../ui/app_range.h"
 #include "lvgl.h"
 #include <stdio.h>
 
@@ -14,8 +15,9 @@ LV_FONT_DECLARE(score_font_16);
 #define BLUE 0x74C5D9
 
 static lv_obj_t *s_screen, *s_board, *s_dialog, *s_battery, *s_race, *s_status, *s_storage;
-static lv_obj_t *s_cards[2], *s_points[2], *s_menu_rows[3];
+static lv_obj_t *s_cards[2], *s_points[2], *s_menu_rows[2];
 static lv_obj_t *s_title, *s_detail, *s_target_hint;
+static app_range_t s_target_range;
 
 static lv_obj_t *panel(lv_obj_t *parent, int x, int y, int w, int h) {
     lv_obj_t *o = lv_obj_create(parent);
@@ -76,11 +78,12 @@ bool score_ui_create(void *content) {
     s_title = label(s_dialog, 8, 5, 272, "", &score_font_16, GOLD);
     s_detail = label(s_dialog, 4, 38, 280, "", &score_font_16, INK);
     s_target_hint = label(s_dialog, 4, 86, 280, "", &score_font_16, MUTED);
-    static const char *menu[] = {TXT_NEW, TXT_UNDO, TXT_ROTATION};
-    for (unsigned i = 0; i < 3; ++i) {
+    static const char *menu[] = {TXT_NEW, TXT_UNDO};
+    for (unsigned i = 0; i < 2; ++i) {
         s_menu_rows[i] = panel(s_dialog, 30, 26 + (int)i * 30, 228, 28);
         label(s_menu_rows[i], 3, 2, 222, menu[i], &score_font_16, INK);
     }
+    s_target_range=(app_range_t){0};
     s_status = label(s_screen, 12, 156, 296, TXT_EMPTY, &score_font_16, INK);
     s_storage = label(s_screen, 12, 175, 296, "", &score_font_16, MUTED);
     return true;
@@ -108,9 +111,14 @@ void score_ui_render(const score_session_t *s, const score_controller_t *ui,
         lv_obj_remove_flag(s_dialog, LV_OBJ_FLAG_HIDDEN);
     }
     lv_label_set_text_fmt(s_race, TXT_RACE, (unsigned)s->state.target);
-    for (unsigned i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < 2; ++i) {
         if (ui->page == SCORE_PAGE_SETTINGS) lv_obj_remove_flag(s_menu_rows[i], LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s_menu_rows[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if(ui->page==SCORE_PAGE_TARGET && !s_target_range.root)
+        app_range_create(&s_target_range,s_dialog,20,28,248,&score_font_16);
+    if(ui->page!=SCORE_PAGE_TARGET && s_target_range.root) {
+        lv_obj_delete(s_target_range.root); s_target_range=(app_range_t){0};
     }
     lv_label_set_text(s_detail, "");
     lv_label_set_text(s_target_hint, "");
@@ -121,15 +129,16 @@ void score_ui_render(const score_session_t *s, const score_controller_t *ui,
         }
     } else if (ui->page == SCORE_PAGE_SETTINGS) {
         lv_label_set_text(s_title, TXT_SETTINGS);
-        for (unsigned i = 0; i < 3; ++i) selected(s_menu_rows[i], ui->settings_focus == i, GOLD);
-    } else if (ui->page == SCORE_PAGE_DIRECTION) {
-        lv_label_set_text(s_title, TXT_ROTATION);
-        lv_label_set_text(s_detail, ui->pending_rotation == APP_ROTATION_270 ? TXT_ROTATE_270 : TXT_ROTATE_90);
+        for (unsigned i = 0; i < 2; ++i) selected(s_menu_rows[i], ui->settings_focus == i, GOLD);
     } else if (ui->page == SCORE_PAGE_TARGET) {
         lv_label_set_text(s_title, TXT_RACE_TITLE);
-        lv_label_set_text_fmt(s_detail, TXT_RACE, (unsigned)ui->target);
         const score_config_t *config = score_config_find(s->state.rule_id);
-        lv_label_set_text_fmt(s_target_hint, "%u - %u", config->min_target, config->max_target);
+        char current[32],minimum[12],maximum[12];
+        snprintf(current,sizeof(current),TXT_RACE,(unsigned)ui->target);
+        snprintf(minimum,sizeof(minimum),"%u",config->min_target);
+        snprintf(maximum,sizeof(maximum),"%u",config->max_target);
+        app_range_render(&s_target_range,ui->target-config->min_target,config->max_target-config->min_target,
+                         current,minimum,maximum,true);
     } else if (ui->page == SCORE_PAGE_NEW) {
         lv_label_set_text(s_title, TXT_NEW_TITLE);
         lv_label_set_text_fmt(s_detail, TXT_RACE, (unsigned)ui->target);

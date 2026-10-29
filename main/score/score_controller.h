@@ -5,13 +5,12 @@
 
 typedef enum {
     SCORE_PAGE_BOARD, SCORE_PAGE_SETTINGS, SCORE_PAGE_TARGET,
-    SCORE_PAGE_NEW, SCORE_PAGE_DIRECTION, SCORE_PAGE_COUNT
+    SCORE_PAGE_NEW, SCORE_PAGE_COUNT
 } score_page_t;
 typedef struct {
     score_page_t page;
-    uint8_t settings_focus; // New match, Undo, Direction
+    uint8_t settings_focus; // New match, Undo
     app_rotation_t rotation;
-    app_rotation_t pending_rotation;
     uint8_t target;
 } score_controller_t;
 

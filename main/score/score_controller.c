@@ -5,8 +5,7 @@
 typedef enum {
     ACTION_ADD_A = 1, ACTION_SUB_A, ACTION_ADD_B, ACTION_SUB_B,
     ACTION_SETTINGS, ACTION_PREVIOUS, ACTION_NEXT, ACTION_OPEN, ACTION_BACK,
-    ACTION_DECREASE, ACTION_INCREASE, ACTION_CONTINUE, ACTION_NEW,
-    ACTION_ROTATE_270, ACTION_ROTATE_90, ACTION_APPLY_DIRECTION
+    ACTION_DECREASE, ACTION_INCREASE, ACTION_CONTINUE, ACTION_NEW
 } action_t;
 
 void score_controller_init(score_controller_t *ui, const score_session_t *s) {
@@ -30,7 +29,7 @@ void score_controller_bindings(const score_controller_t *ui, const score_session
     app_actions_register(b, 1, APP_GESTURE_LONG, ACTION_BACK, TXT_TARGET_BACK, true, APP_ACTION_BACK);
     switch (ui->page) {
     case SCORE_PAGE_SETTINGS: {
-        static const char *labels[] = {TXT_NEW, TXT_UNDO, TXT_ROTATION};
+        static const char *labels[] = {TXT_NEW, TXT_UNDO};
         app_actions_register(b, 0, APP_GESTURE_SHORT, ACTION_PREVIOUS, TXT_PREVIOUS, true, APP_ACTION_NAVIGATE);
         app_actions_register(b, 1, APP_GESTURE_SHORT, ACTION_OPEN, labels[ui->settings_focus],
                              ui->settings_focus != 1 || s->history_count > 0, APP_ACTION_CONFIRM);
@@ -46,11 +45,6 @@ void score_controller_bindings(const score_controller_t *ui, const score_session
         app_actions_register(b, 0, APP_GESTURE_SHORT, ACTION_BACK, TXT_CANCEL, true, APP_ACTION_CANCEL);
         app_actions_register(b, 1, APP_GESTURE_SHORT, ACTION_NEW, TXT_CONFIRM, true, APP_ACTION_CONFIRM);
         app_actions_register(b, 2, APP_GESTURE_SHORT, ACTION_BACK, TXT_TARGET_BACK, true, APP_ACTION_BACK);
-        break;
-    case SCORE_PAGE_DIRECTION:
-        app_actions_register(b, 0, APP_GESTURE_SHORT, ACTION_ROTATE_270, "270°", true, APP_ACTION_NAVIGATE);
-        app_actions_register(b, 1, APP_GESTURE_SHORT, ACTION_APPLY_DIRECTION, TXT_CONFIRM, true, APP_ACTION_CONFIRM);
-        app_actions_register(b, 2, APP_GESTURE_SHORT, ACTION_ROTATE_90, "90°", true, APP_ACTION_NAVIGATE);
         break;
     default: break;
     }
@@ -72,8 +66,8 @@ bool score_controller_input(score_controller_t *ui, const score_session_t *s,
         ui->settings_focus = 0;
         ui->page = SCORE_PAGE_SETTINGS;
         break;
-    case ACTION_PREVIOUS: ui->settings_focus = (ui->settings_focus + 2) % 3; break;
-    case ACTION_NEXT: ui->settings_focus = (ui->settings_focus + 1) % 3; break;
+    case ACTION_PREVIOUS: ui->settings_focus = (ui->settings_focus + 1) % 2; break;
+    case ACTION_NEXT: ui->settings_focus = (ui->settings_focus + 1) % 2; break;
     case ACTION_OPEN:
         if (ui->settings_focus == 0) {
             ui->target = score_config_find(s->state.rule_id)->default_target;
@@ -82,9 +76,6 @@ bool score_controller_input(score_controller_t *ui, const score_session_t *s,
             c->type = SCORE_CMD_UNDO;
             ui->page = SCORE_PAGE_BOARD;
             return true;
-        } else {
-            ui->pending_rotation = ui->rotation;
-            ui->page = SCORE_PAGE_DIRECTION;
         }
         break;
     case ACTION_BACK:
@@ -100,12 +91,6 @@ bool score_controller_input(score_controller_t *ui, const score_session_t *s,
         c->target = ui->target;
         ui->page = SCORE_PAGE_BOARD;
         return true;
-    case ACTION_ROTATE_270: ui->pending_rotation = APP_ROTATION_270; break;
-    case ACTION_ROTATE_90: ui->pending_rotation = APP_ROTATION_90; break;
-    case ACTION_APPLY_DIRECTION:
-        ui->rotation = ui->pending_rotation;
-        ui->page = SCORE_PAGE_SETTINGS;
-        break;
     default: break;
     }
     return false;
