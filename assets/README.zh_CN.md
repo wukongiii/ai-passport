@@ -55,3 +55,22 @@ BSP 在 `components/bsp/src/bsp_battery.c` 中嵌入这 80 字节，主机检查
 `fa7365671093ef449c5bdcfb4adb279e3d275f888109f50b6b2f21e9b96220d5`。
 这是电量计参数，不是充电配置，也不能通用于所有 500 mAh 电芯；详见
 [硬件指南](../docs/hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.zh_CN.md#9-cw2017-电池计)。
+
+<a id="scoreboard-font"></a>
+### 记分牌字体
+
+`fonts/score_font_16.c` 与 `fonts/score_font_inventory.c` 为记分牌固定文本及可打印
+ASCII 生成。字体为 Noto Sans CJK SC Regular，16 px，4 bpp、不压缩、无字距调整；
+许可 SIL OFL 1.1（[许可](fonts/OFL.txt)）。来源：[Noto CJK](https://github.com/notofonts/noto-cjk/tree/f8d157532fbfaeda587e826d4cd5b21a49186f7c)，
+`Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf`，SHA-256：
+`2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b`。
+完整源字体和转换器缓存位于被忽略的 `build/font-tools/`。
+修改 `main/score/score_strings.h` 后重新生成：
+
+```bash
+npm install --prefix build/font-tools --no-audit --no-fund lv_font_conv@1.5.3
+python3 tools/generate_score_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
+```
+
+生成器校验源哈希。应用编译两个生成 C 文件，启动时校验所有所需码点。
+此子集不覆盖任意球员姓名；实际中文渲染仍需设备验收。

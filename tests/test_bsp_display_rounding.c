@@ -42,6 +42,7 @@ int main(void)
     // The optimized row-span path must be pixel-for-pixel equivalent at both
     // corners, the radius transition, and for clamped/degenerate radii.
     assert_span_matches_pixels(width, height, radius);
+    assert_span_matches_pixels(height, width, radius);
     assert_span_matches_pixels(17, 11, 4);
     assert_span_matches_pixels(17, 11, 99);
     assert_span_matches_pixels(17, 11, 0);

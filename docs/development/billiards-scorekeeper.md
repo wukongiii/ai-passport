@@ -1,0 +1,172 @@
+<p align="right"><a href="billiards-scorekeeper.zh_CN.md">简体中文</a> · <strong>English</strong></p>
+
+# Billiards Scorekeeper
+
+This branch starts an offline Chinese eight-ball scoreboard, replacing the
+hardware-test startup with its own 320 x 240 landscape UI. Original demo sources
+remain as references but are not linked into the application. The 8 MB partition
+layout is unchanged. Chase scoring, snooker, networking and AI speech are future
+increments; they are not implemented in this checkpoint.
+
+## Use and interaction contract
+
+Two fixed players A/B count frames, with winner detection and undo of the last
+32 operations. This is a match counter, not a ball tracker or referee. Player
+names, ball groups, turn tracking and handicaps are not implemented.
+
+| Screen | Short left / middle / right | Hold left / middle / right |
+| --- | --- | --- |
+| Scoreboard | A +1 / Settings / B +1 | A -1 / unassigned / B -1 |
+| Settings | Previous / execute selection / Next | unassigned / Back / unassigned |
+| Race setup | Decrease / Continue / Increase | unassigned / Back / unassigned |
+| New-match confirmation | Cancel / Confirm / Back | unassigned / Back / unassigned |
+| Direction | Select 270 / Confirm / Select 90 | unassigned / Back / unassigned |
+
+Board scoring applies immediately without selection or confirmation. Zero cannot
+be decremented. Winning disables additions, but subtraction can correct a
+mistaken winning point and reopen scoring. Settings contains New Match, Undo
+and Direction. New-match clearing requires confirmation and is itself undoable.
+Undo and match data survive restart.
+
+Subpages consistently use middle short for execute/confirm and middle hold for
+Back. Direction selection applies only after middle confirmation. Future modules
+must preserve these meanings rather than moving confirmation to another key.
+Double clicks are separate, currently unassigned events and do not act as short
+clicks. Holds do not repeat. The BSP uses a 180 ms short-press window and a 500 ms
+hold threshold; direct scoring still waits for gesture classification.
+
+Default rotation is 270 degrees; Settings also offers 90 degrees, with the last
+confirmed direction restored on restart. No portrait mode is exposed. The strip
+follows the physical key edge: top at 270, bottom at 90. BSP hardware indices
+UP/DOWN/OK map to visual left/middle/right at 270 and reverse at 90. All gestures
+use this shared conversion. The user confirmed physical mapping on the device.
+The separate hardware power button is not exposed as a software input and cannot
+serve as a hint toggle with the documented wiring/BSP.
+
+The display dims after 30 seconds and blanks after 120 seconds. The complete
+wake gesture is consumed before scoring resumes. This saves backlight power;
+it is not system sleep and does not establish battery runtime.
+
+## Independent action registration and UI shell
+
+`main/ui/app_actions.h` is a pure-C, allocation-free registry. Pages register
+an action ID, label, enabled state, semantic role, visual slot and gesture.
+`app_actions_resolve` dispatches from this same registry, so unregistered or
+disabled actions cannot execute. Duplicate slot/gesture registrations are
+rejected. Labels must outlive the registry.
+
+```c
+app_bindings_t bindings;
+app_actions_clear(&bindings);
+app_actions_register(&bindings, 0, APP_GESTURE_SHORT,
+                     ACTION_PREVIOUS, "Previous", true, APP_ACTION_NAVIGATE);
+app_actions_register(&bindings, 1, APP_GESTURE_SHORT,
+                     ACTION_CONFIRM, "Confirm", true, APP_ACTION_CONFIRM);
+uint16_t action = app_actions_resolve(&bindings, slot, gesture);
+```
+
+`app_shell` renders registered actions independently of the sport. It reserves
+24 pixels per configured gesture group in short/hold/double order, omitting
+empty groups. One/two/three rows leave 216/192/168 pixels of content height.
+Symbols are `·` (short), `—` (hold), `··` (double). Empty cells show `--`; disabled
+cells are muted. Eight-ball uses two rows for addition/subtraction. Modules draw
+only inside `shell.content` and reflow to its height, without scattered button
+instructions or undisplayed gestures.
+
+Semantic backgrounds are shared across sports and gestures: green for confirm /
+increase, orange-red for cancel / decrease, gray for Back, blue-gray for navigation
+/ neutral actions. Labels and symbols remain alongside color. Modules register
+roles, never page-specific raw colors.
+
+## Configuration, architecture and extension
+
+`score_config.h` / `.c` own sport defaults and bounds. Eight-ball is configured
+for two players, default race to 10, range 1 through 35. Initialization, New Match
+setup, controller limits, rule validation and displayed range read this config.
+Existing records retain their target and score; changing defaults does not
+migrate matches. Changing bounds requires a stored-record compatibility review.
+
+- `score.h` / `score.c`: plain-C session, semantic commands, bounded snapshots,
+  rule registry and versioned persistent codec.
+- `chinese_eight.c`: validation, reducer and winner rule; accepts one-frame +1/-1
+  adjustments and legacy frame-award commands, rejecting unsupported operations.
+- `score_controller.c`: pages and action registration/dispatch.
+- `score_ui.c`: application LVGL presentation using the shared action shell.
+- `score_store.c`: NVS adapter; `main.c`: sole session owner, input queue,
+  storage/retries, battery polling, dimming and LVGL synchronization.
+
+Add a stable rule descriptor and configuration for another sport, with its
+controller/presentation and tests. Signed points do not implement future rules;
+ball/turn state may require a deliberate schema extension. BSP reusable hardware
+logic remains separate from application state and screens.
+
+Future voice must bind player and revision at recording start, validate and
+deduplicate responses, then enqueue semantic commands to the same session owner.
+`score_dispatch` rejects stale revisions and invalid operations and never calls
+AI, networking, NVS or LVGL. Transport, authentication, timeouts and request
+identity still need implementation.
+
+## Persistence and failure behavior
+
+Score changes write `billiards/session`: a fixed-width little-endian record with
+version, CRC32 and undo history. Direction changes write the independent versioned
+`billiards/ui` record and do not enter score history. Focus changes do not write
+Flash. NVS commits run outside the LVGL lock; failed saves remain pending and
+retry every five seconds, with visible failure status. Uncommitted changes may
+be lost on power loss.
+
+NVS initialization failures never trigger erase. Invalid score records are
+preserved until confirming New Match permits replacement of this application's
+record. Missing/invalid direction records fall back to 270; invalid settings are
+not replaced until the user applies a direction. Other namespaces are not cleared.
+
+## Fonts and verification
+
+Fixed strings are inventoried in `score_strings.h` and `ui/app_strings.h`.
+[Font provenance and regeneration](../../assets/README.md#scoreboard-font) cover
+the licensed 16 px subset. Startup checks every required glyph against the actual
+widget font and rejects placeholders. Arbitrary names/ASR output are unsupported.
+
+The normal gate tests rules, boundaries, winner correction, undo, stale commands,
+configuration, old record restore, corruption, NVS failures, wake ordering,
+physical-input conversion, semantic continuity and landscape BSP masks.
+
+Actual LVGL host preview (requires LVGL 9.5.0 sources):
+
+```bash
+cmake -S tests/score_preview -B build/score-render -DSCORE_LVGL_SOURCE=/absolute/path/to/lvgl-9.5.0
+cmake --build build/score-render -j 8
+(cd build/score-render && ./preview)
+```
+
+It exports five pages at both rotations and synthetic nine-action shell previews,
+then exercises 500 transitions. It uses the device's 32 KB LVGL pool; observed
+peak was 23960 bytes with 6392 bytes free. Host rendering cannot prove physical
+key placement, screen quality, timing or power consumption.
+
+## Accepted stage checkpoint
+
+2026-10-29: the user accepted the current interaction and visual design and
+requested a local checkpoint commit. No push or release was requested.
+
+- Build: PASS, complete gate with ESP-IDF 5.5.3.
+- Host tests: PASS, including 500 stable LVGL renders.
+- Device tests: PASS for application-write hash verification and 18-second boot
+  observation; user accepted the revised UI and controls.
+- Unverified: exhaustive page/glyph checks, power-loss/restart durability, all
+  dim/blank/wake cases, long-run memory/stack margins and measured power/runtime.
+
+Verified local archive:
+`build/firmware/4c88c60ecf91f1057b88d72d8a0016e0c08c15127b5f5d6e50c6c51040454ea2/`.
+
+- Full-image SHA-256: `4c88c60ecf91f1057b88d72d8a0016e0c08c15127b5f5d6e50c6c51040454ea2`
+- Matching ELF SHA-256: `ab11160a7ccebdd9d1a8c5b6360c6d5091662f800c288659045bff8969a9e612`
+
+Under the user's standing authorization to flash after successful builds, only
+the matching 835920-byte application was written at `0x10000`, retaining the
+compatible partition layout and NVS. Startup reached Ready with 215092 bytes free
+heap and a 114688-byte largest block; no panic/assert/reset loop was observed.
+The serial port was closed. Firmware, debug bundles and raw logs remain local
+and ignored. A merged image at `0x0` may reset NVS; preserving state requires a
+compatible segmented update, not whole-chip erase. This checkpoint commit does
+not rebuild or reflash the accepted firmware.

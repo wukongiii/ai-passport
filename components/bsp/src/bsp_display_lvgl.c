@@ -33,7 +33,8 @@ static void rounded_flush_event(lv_event_t *event)
                                      (y - area->y1) * draw_buf->header.stride);
         int32_t visible_x1;
         int32_t visible_x2;
-        if (!bsp_display_rounded_row_span(y, BSP_LCD_W, BSP_LCD_H,
+        if (!bsp_display_rounded_row_span(y, lv_display_get_horizontal_resolution(disp),
+                                          lv_display_get_vertical_resolution(disp),
                                           BSP_LVGL_SCREEN_RADIUS, &visible_x1,
                                           &visible_x2)) {
             memset(row, 0, (size_t)width * sizeof(uint16_t));

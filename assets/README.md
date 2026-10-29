@@ -59,3 +59,24 @@ Decoded 80-byte SHA-256:
 `fa7365671093ef449c5bdcfb4adb279e3d275f888109f50b6b2f21e9b96220d5`.
 This is a fuel-gauge profile, not a charging configuration or a generic profile
 for every 500 mAh cell; see the [hardware guide](../docs/hardware-design/AI_HARDWARE_DEVELOPMENT_GUIDE.md#9-cw2017-fuel-gauge).
+
+<a id="scoreboard-font"></a>
+### Scoreboard font
+
+`fonts/score_font_16.c` and `fonts/score_font_inventory.c` are generated for the
+fixed scoreboard strings plus printable ASCII. The font is Noto Sans CJK SC
+Regular, 16 px, 4 bpp uncompressed, without kerning; license: SIL OFL 1.1
+([license](fonts/OFL.txt)). Source: [Noto CJK](https://github.com/notofonts/noto-cjk/tree/f8d157532fbfaeda587e826d4cd5b21a49186f7c),
+`Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf`, SHA-256
+`2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b`.
+The full source font and converter cache stay under ignored `build/font-tools/`.
+Regenerate after changing `main/score/score_strings.h`:
+
+```bash
+npm install --prefix build/font-tools --no-audit --no-fund lv_font_conv@1.5.3
+python3 tools/generate_score_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
+```
+
+The generator verifies the source hash. The application compiles both generated
+C files and validates every required code point at startup. The subset does not
+cover arbitrary player names. Physical Chinese rendering remains device acceptance.
