@@ -5,7 +5,7 @@
 
 enum { GAME_PLAYER_NAME_CHARS = 8, GAME_PLAYER_NAME_CAPACITY = 25 };
 typedef struct { char players[2][GAME_PLAYER_NAME_CAPACITY]; } game_eight_preferences_t;
-typedef struct { const char *id, *name; bool available; } game_preferences_entry_t;
+typedef struct { const char *id, *name; bool available; unsigned module_id; } game_preferences_entry_t;
 const game_preferences_entry_t *game_preferences_entry(unsigned index);
 void game_preferences_default(game_eight_preferences_t *out);
 /* Strict UTF-8, bounded to the existing 14px font: printable ASCII, CJK

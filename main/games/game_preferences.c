@@ -7,8 +7,8 @@
 
 const game_preferences_entry_t *game_preferences_entry(unsigned index) {
     static const game_preferences_entry_t entries[] = {
-        {"eight", TXT_APP_EIGHT, true}, {"chase", TXT_APP_CHASE, false},
-        {"snooker", TXT_APP_SNOOKER, false}
+        {"eight", TXT_APP_EIGHT, true, 1}, {"chase", TXT_APP_CHASE, false, 2},
+        {"snooker", TXT_APP_SNOOKER, false, 3}
     };
     return index < sizeof(entries) / sizeof(entries[0]) ? &entries[index] : NULL;
 }

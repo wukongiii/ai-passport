@@ -3,7 +3,7 @@
 #include "app_network_socket.h"
 #include "../ai/ai_config.h"
 #include "../ai/ai_persona.h"
-#include "../games/eight_ai.h"
+#include "../app/app_module.h"
 #include "../games/game_preferences.h"
 #include "cJSON.h"
 #include "esp_event.h"
@@ -215,8 +215,6 @@ static esp_err_t persona_status(httpd_req_t *r){
     cJSON *body=cJSON_CreateObject();if(!body){free(s);return ESP_ERR_NO_MEM;}
     cJSON_AddStringToObject(body,"name",s->value.name);cJSON_AddStringToObject(body,"prompt",s->value.prompt);
     cJSON_AddStringToObject(body,"default_prompt",ai_persona_default_prompt());
-    cJSON_AddStringToObject(body,"game_prompt",eight_ai_instructions());
-    cJSON_AddStringToObject(body,"tools",eight_ai_tools());
     cJSON_AddBoolToObject(body,"ready",s->ready);cJSON_AddBoolToObject(body,"busy",s->busy);
     cJSON_AddNumberToObject(body,"revision",s->revision);cJSON_AddNumberToObject(body,"submitted",s->submitted);
     cJSON_AddNumberToObject(body,"completed",s->completed);cJSON_AddNumberToObject(body,"error",s->error);free(s);
@@ -249,11 +247,16 @@ static esp_err_t games_status(httpd_req_t *r){
     cJSON_AddNumberToObject(body,"submitted",s.submitted);cJSON_AddNumberToObject(body,"completed",s.completed);
     cJSON *list=cJSON_AddArrayToObject(body,"games");
     if(!list){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
+    unsigned module_count;const app_module_t *modules=app_registry(&module_count);
     for(unsigned i=0;game_preferences_entry(i);++i){
         const game_preferences_entry_t *entry=game_preferences_entry(i);cJSON *item=cJSON_CreateObject();
         if(!item){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
         cJSON_AddStringToObject(item,"id",entry->id);cJSON_AddStringToObject(item,"name",entry->name);
         cJSON_AddBoolToObject(item,"available",entry->available);cJSON_AddItemToArray(list,item);
+        const ai_game_definition_t *definition=NULL;
+        for(unsigned m=0;m<module_count;++m)if(modules[m].id==entry->module_id && modules[m].ai && modules[m].ai->definition){definition=modules[m].ai->definition();break;}
+        cJSON_AddBoolToObject(item,"ai_available",definition!=NULL);
+        if(definition){cJSON_AddStringToObject(item,"ai_prompt",definition->instructions);cJSON_AddStringToObject(item,"ai_tools",definition->tools);}
         if(entry->available){
             cJSON_AddStringToObject(item,"player1",s.eight.players[0]);
             cJSON_AddStringToObject(item,"player2",s.eight.players[1]);

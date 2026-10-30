@@ -1305,9 +1305,10 @@ Assistant identity and behavior are application context, separate from model
 connections. The phone portal has independent expandable blocks for network,
 games, assistant, model connections, and display/audio. The assistant block edits
 the nickname (default product assistant name, 1-12 supported characters) and
-behavior prompt (1-1536 UTF-8 bytes). It also displays the actual game rules,
-six tool definitions, message ordering and fixed generation parameters. Rules
-and tools are read-only: editing behavior cannot create unsupported operations.
+behavior prompt (1-1536 UTF-8 bytes). The selected entry in the games block displays its own actual game rules and
+tool definitions. The assistant block displays message ordering and fixed
+generation parameters. Rules and tools are read-only: editing behavior cannot
+create unsupported operations.
 The default behavior asks for one short Chinese reply, direct execution when
 player/amount are clear, and one short clarification only for missing information.
 
@@ -1342,3 +1343,14 @@ A real browser with mocked endpoints verified independent folding, multiline sav
 reload, draft preservation and 390-pixel width without console errors. Real LVGL
 previews cover the assistant page in both rotations. Physical buttons, real NVS
 persistence, model understanding and speech remain device acceptance checks.
+
+
+Game-specific AI rules belong to the game configuration block, never to the
+shared assistant. `GET /api/persona` contains only assistant settings/status.
+`GET /api/games` resolves each entry by module ID through the application registry
+and its immutable `ai_game_ops_t.definition` metadata. The eight-ball snapshot
+and configuration metadata share the same rules/tools definitions. Switching the
+phone game selector replaces both rule text and tools; unimplemented games show
+AI unavailable with no fallback to eight-ball. This selector only previews that
+game's configuration; actual voice requests still use the active game's snapshot,
+with its scores, players and revision. HTTP does not read live game state.

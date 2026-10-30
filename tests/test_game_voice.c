@@ -47,7 +47,7 @@ static const char *response="{\"choices\":[{\"finish_reason\":\"tool_calls\",\"m
 static bool snap(void *c,ai_game_snapshot_t *s){(void)c;*s=(ai_game_snapshot_t){.revision=revision,.configuration=names_revision,.instructions="Follow game tools"};strcpy(s->context,"{}");strcpy(s->tools,"[]");return true;}
 static bool stamp(void *c,uint32_t *r,uint32_t *n){(void)c;*r=revision;*n=names_revision;return true;}
 static ai_game_result_t execute(void *c,uint32_t r,uint32_t n,const ai_tool_call_t *call,char *out,size_t cap){(void)c;assert(r==revision&&n==names_revision&&!strcmp(call->name,"adjust_score"));++revision;++executes;snprintf(out,cap,"{\"message\":\"当前比分一比零\"}");return AI_GAME_OK;}
-static const ai_game_ops_t ops={snap,stamp,execute};
+static const ai_game_ops_t ops={snap,stamp,execute,NULL};
 static ai_game_target_t target={&ops,NULL,1,1};
 int64_t esp_timer_get_time(void){return now;}
 void vTaskDelay(TickType_t n){now+=(int64_t)n*1000;}

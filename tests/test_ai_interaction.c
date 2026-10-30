@@ -143,8 +143,11 @@ int main(void){
     call=(ai_tool_call_t){.name="set_score",.arguments="{\"player_id\":\"p1\",\"score\":8,\"expected_revision\":3}"};
     assert(eight_ai_command(&flex,&call,&c)==AI_GAME_OK&&score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==8);
     c=(score_command_t){.type=SCORE_CMD_UNDO,.expected_revision=4};assert(score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==5&&flex.state.points[1]==3);
+    // Configuration introspection comes from the same game definition as live requests.
+    const ai_game_definition_t *definition=app_module_eight.ai->definition();
     // Configured persona is an independent system message for text and audio.
     assert(eight_ai_snapshot(&flex,&names.eight,1,&snapshot));
+    assert(definition&&definition->instructions==snapshot.instructions&&!strcmp(definition->tools,snapshot.tools));
     bounded.assistant_name="逗宝";bounded.assistant_prompt="短句回复\n按用户指定数值修改";
     assert(adapter->encode(&workspace,&bounded,body,sizeof(body))&&strstr(body,"逗宝")&&strstr(body,"assistant_name")&&strstr(body,"短句回复"));
     audio.assistant_name=bounded.assistant_name;audio.assistant_prompt=bounded.assistant_prompt;

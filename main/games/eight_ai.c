@@ -23,8 +23,9 @@ static const char tools[]=
     "{\"name\":\"undo_last\",\"description\":\"Undo one complete score operation\",\"parameters\":{\"type\":\"object\",\"properties\":{\"expected_revision\":{\"type\":\"integer\"}},\"required\":[\"expected_revision\"],\"additionalProperties\":false}},"
     "{\"name\":\"get_score\",\"description\":\"Read score\",\"parameters\":{\"type\":\"object\",\"properties\":{\"expected_revision\":{\"type\":\"integer\"}},\"required\":[\"expected_revision\"],\"additionalProperties\":false}},"
     "{\"name\":\"ask_clarification\",\"description\":\"Ask only when required information is missing\",\"parameters\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\"}},\"required\":[\"question\"],\"additionalProperties\":false}}]";
-const char *eight_ai_instructions(void){return instructions;}
-const char *eight_ai_tools(void){return tools;}
+const ai_game_definition_t *eight_ai_definition(void){
+    static const ai_game_definition_t definition={instructions,tools};return &definition;
+}
 bool eight_ai_result(const score_session_t *s,char *out,size_t capacity){
     ai_json_writer_t w;ai_json_writer(&w,out,capacity);ai_json_write(&w,"{\"revision\":");ai_json_int(&w,s->revision);
     ai_json_write(&w,",\"scores\":[");ai_json_int(&w,s->state.points[0]);ai_json_write(&w,",");ai_json_int(&w,s->state.points[1]);

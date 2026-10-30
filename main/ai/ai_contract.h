@@ -24,11 +24,14 @@ typedef enum {
 /* Owner-task only; instructions have static lifetime. Snapshot context/tools are
  * immutable copies. stamp must include every change affecting interpretation.
  * Reserved common tool ask_clarification({question}) never calls game execute. */
+typedef struct { const char *instructions,*tools; } ai_game_definition_t;
 typedef struct {
     bool (*snapshot)(void *,ai_game_snapshot_t *);
     bool (*stamp)(void *,uint32_t *revision,uint32_t *configuration);
     ai_game_result_t (*execute)(void *,uint32_t revision,uint32_t configuration,
                                  const ai_tool_call_t *,char *result,size_t capacity);
+    /* Immutable metadata, safe for configuration readers without live game state. */
+    const ai_game_definition_t *(*definition)(void);
 } ai_game_ops_t;
 
 typedef struct { const ai_game_ops_t *ops; void *context; uint16_t module_id; uint32_t activation; } ai_game_target_t;

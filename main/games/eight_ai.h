@@ -7,5 +7,4 @@ bool eight_ai_snapshot(const score_session_t *,const game_eight_preferences_t *,
 ai_game_result_t eight_ai_command(const score_session_t *,const ai_tool_call_t *,score_command_t *);
 bool eight_ai_result(const score_session_t *,char *,size_t);
 
-const char *eight_ai_instructions(void);
-const char *eight_ai_tools(void);
+const ai_game_definition_t *eight_ai_definition(void);

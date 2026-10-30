@@ -5,6 +5,7 @@
 <details class="block" id="games"><summary>玩法配置</summary><p class="muted">按玩法分别设置。名字保存后会更新设备显示，不改变当前比分和撤销记录。</p>
 <label for="gameSelect">选择玩法</label><select id="gameSelect" disabled><option>正在读取玩法…</option></select>
 <form id="gameForm" hidden><h3>中八 · 选手名字</h3><label for="player1">左侧选手</label><input id="player1" name="player1" required maxlength="8" autocomplete="off" spellcheck="false" disabled><label for="player2">右侧选手</label><input id="player2" name="player2" required maxlength="8" autocomplete="off" spellcheck="false" disabled><p class="muted">每人 1–8 个字符，支持汉字、英文字母、数字和常用标点。前后空格会去除，两人名字不能相同；暂不支持表情、生僻扩展汉字和其他语言字母。</p><button id="gameSave" disabled>保存中八配置</button></form>
+<details class="inner" id="gameAi"><summary>此玩法的 AI 规则与操作接口</summary><p id="gameAiStatus" class="muted"></p><pre id="gamePrompt" hidden></pre><pre id="gameTools" hidden></pre></details>
 <p id="gamePlaceholder" class="muted" hidden>此玩法配置即将开放。</p><button id="gameReload" type="button" disabled>重新读取已保存配置</button><div id="gameMessage" class="connection" role="status" aria-live="polite">正在读取玩法配置…</div></details>
 <details class="block" id="assistant"><summary>AI 助手 · 昵称与提示词</summary>
 <p class="muted">这是应用上下文，与模型连接分开保存。切换模型会沿用这些设置，当前玩法另行提供规则和比分。</p>
@@ -12,7 +13,7 @@
 <label for="assistantPrompt">行为提示词 · 实际发送</label><textarea id="assistantPrompt" required maxlength="1536" spellcheck="false"></textarea><p id="promptCount" class="muted count"></p>
 <button id="personaSave">保存助手设置</button></form><button id="personaReset" type="button">填入默认提示词</button><button id="personaReload" type="button">重新读取助手设置</button>
 <div id="personaMessage" class="connection" role="status" aria-live="polite">正在读取助手设置…</div>
-<details class="inner"><summary>玩法规则与操作接口 · 实际发送</summary><p class="muted">当前是中八：支持批量加减、设置某人分数、设置双方比分、撤销和查询。比分范围由当前抢局目标决定。以下规则与接口由玩法提供；修改行为提示词不会扩展固件能力。</p><pre id="gamePrompt"></pre><pre id="gameTools"></pre></details>
+
 <details class="inner"><summary>发送内容与固定参数</summary><p class="muted">请求依次包含：行为提示词、AI 昵称、玩法规则、当前比分／选手／抢局目标／版本／撤销状态、你的语音和补充文字，以及工具定义。每次最多一个工具调用。固定请求参数：temperature=0、max_tokens=256、stream=false；配置未设置服务商专用的关闭思考参数。</p></details>
 </details>
 <details class="block" id="ai"><summary>模型连接</summary><p class="muted">最多保存 4 个模型，可自定义名称并选择当前模型。填写模型 ID、API URL 和 API Key。接口需兼容 Chat Completions，语音记分还需支持 WAV 音频输入和工具调用。</p>
@@ -117,6 +118,10 @@ function gamesMessage(text,state=0){$('gameMessage').textContent=text;$('gameMes
 function gamesFill(){const g=gamesSnapshot?.games.find(g=>g.id==='eight');if(!g)return;$('player1').value=g.player1;$('player2').value=g.player2;gamesDraftRevision=gamesSnapshot.revision;gamesDirty=false;gamesConflict=false;}
 function gamesRender(){
 const g=gameChosen(),busy=pending||gamesSending||!!gamesRequest||gamesSnapshot?.busy,ready=gamesOnline&&gamesSnapshot?.ready;
+$('gameAi').hidden=!g;
+$('gameAiStatus').textContent=g?.ai_available?g.name+'专属规则与接口，由玩法模块提供；进入该玩法后才发送，当前只读。通用昵称与行为在 AI 助手中设置。':(g?.name||'此玩法')+'尚未接入 AI，没有可发送的规则或操作接口。';
+$('gamePrompt').hidden=$('gameTools').hidden=!g?.ai_available;
+$('gamePrompt').textContent=g?.ai_prompt||'';try{$('gameTools').textContent=JSON.stringify(JSON.parse(g?.ai_tools||'[]'),null,2);}catch(e){$('gameTools').textContent='';}
 $('gameSelect').disabled=!gamesSnapshot||busy;$('gameForm').hidden=!g?.available;$('gamePlaceholder').hidden=!g||g.available;
 for(const id of ['player1','player2'])$(id).disabled=!ready||busy;
 $('gameSave').disabled=!ready||busy||gamesConflict;$('gameReload').disabled=!gamesOnline||!gamesSnapshot||busy;
@@ -152,7 +157,6 @@ function personaCount(){const size=new TextEncoder().encode($('assistantPrompt')
 function personaFill(){if(!personaSnapshot)return;$('assistantName').value=personaSnapshot.name;$('assistantPrompt').value=personaSnapshot.prompt;personaDraft=personaSnapshot.revision;personaDirty=false;personaConflict=false;personaCount();}
 async function personaRefresh(){if(personaPolling)return;personaPolling=true;try{
 const r=await fetch('/api/persona',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();const first=!personaSnapshot;personaSnapshot=await r.json();
-$('gamePrompt').textContent=personaSnapshot.game_prompt;try{$('gameTools').textContent=JSON.stringify(JSON.parse(personaSnapshot.tools),null,2);}catch(e){$('gameTools').textContent=personaSnapshot.tools;}
 if(first){personaFill();$('personaMessage').textContent='昵称与提示词独立保存，修改后点击保存。';}
 if(personaRequest&&personaSnapshot.completed>=personaRequest){personaRequest=0;if(personaSnapshot.error){$('personaMessage').textContent='保存失败，设备仍使用原来的助手设置，你的输入已保留。';}else{personaFill();$('personaMessage').textContent='助手设置已保存，下一次语音请求生效。';}}
 else if(!personaSending&&!personaRequest&&personaSnapshot.revision!==personaDraft){if(personaDirty){personaConflict=true;$('personaMessage').textContent='设备设置已更新，你的输入已保留。请重新读取后修改。';}else personaFill();}

@@ -95,7 +95,7 @@ static ai_game_result_t ai_execute(void *context,uint32_t revision,uint32_t conf
     }
     return eight_ai_result(&state.session,result,capacity) ? AI_GAME_OK : AI_GAME_INVALID;
 }
-static const ai_game_ops_t ai_ops={ai_snapshot,ai_stamp,ai_execute};
+static const ai_game_ops_t ai_ops={ai_snapshot,ai_stamp,ai_execute,eight_ai_definition};
 static bool tick(void *context, int64_t now) {
     (void)context;
     game_preferences_snapshot_t preferences;game_preferences_snapshot(&preferences);
