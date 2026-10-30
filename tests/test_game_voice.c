@@ -159,12 +159,12 @@ int main(void){
  const char *saved_response=response;response="{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"你好\"}}]}";
  write_waits=3;write_wait_after=4096;begin_job();process_job();drain();verify_audio(3200);assert(!write_waits);partial_write=false;write_wait_after=0;response=saved_response;--spoken;
  unsigned completed_scores=executes;
- stall_write=true;begin_job();process_job();drain();assert(view.error==ESP_ERR_TIMEOUT&&write_calls==10&&executes==completed_scores);stall_write=false;
+ stall_write=true;begin_job();process_job();drain();assert(view.error==ESP_ERR_TIMEOUT&&write_calls==10&&executes==completed_scores&&strstr(view.text,TXT_ERROR_UPLOAD_TIMEOUT));stall_write=false;
  stall_write=cancel_wait=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_IDLE&&write_calls==1);stall_write=cancel_wait=false;
- open_error=0x7002;begin_job();process_job();drain();assert(view.error==0x7002);open_error=0;
- write_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL);write_error=0;
+ open_error=0x7002;begin_job();process_job();drain();assert(view.error==0x7002&&strstr(view.text,TXT_ERROR_CONNECT_TIMEOUT)&&strstr(view.text,"28674"));open_error=0;
+ write_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL&&strstr(view.text,TXT_ERROR_UPLOAD));write_error=0;
  read_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL);read_error=0;
- http_status=401;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&view.error==401);http_status=200;
+ http_status=401;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&view.error==401&&strstr(view.text,TXT_AI_CHECK_AUTH));http_status=200;
  response="{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"你好\"}}]}";
  send_early=false;begin_job();process_job();assert(reads==500&&view.milliseconds==10000);verify_audio(80000);printf("Full clip: audio=%zu TLS application allocations=%zu\n",tls_audio_bytes,tls_bytes);drain();assert(executes==1&&view.state==GAME_VOICE_REPLY&&spoken==2);
  // The response reader handles long reasoning without retaining it or

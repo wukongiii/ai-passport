@@ -141,7 +141,7 @@
 #define TXT_GAME_VOICE_NEED_KEY "请先在 AI 语音中配置模型"
 #define TXT_GAME_VOICE_NEED_WIFI "请先连接 Wi-Fi"
 #define TXT_GAME_VOICE_EMPTY "未听到声音，请双击重试"
-#define TXT_GAME_VOICE_FAILED "语音失败 %d，请双击重试"
+#define TXT_GAME_VOICE_FAILED "%s (%d)"
 #define TXT_GAME_VOICE_DONE "比分已更新"
 #define TXT_GAME_VOICE_SCORE "当前比分 %ld 比 %ld"
 #define TXT_GAME_VOICE_REJECT "操作未生效，请重新说话"
@@ -173,3 +173,16 @@
 
 #define TXT_APP_NET_SAVED_LIST "已保存网络"
 #define TXT_APP_NET_SAVED_REUSE "使用已保存的密码"
+
+#define TXT_ERROR_GENERIC "操作失败，请重试"
+#define TXT_ERROR_REQUEST "网络请求失败，请重试"
+#define TXT_ERROR_ARGUMENT "参数无效或内容不支持"
+#define TXT_ERROR_SIZE "响应过长或数据大小异常"
+#define TXT_ERROR_CONNECT_TIMEOUT "连接服务失败，请重试"
+#define TXT_ERROR_SERVICE "模型服务异常，请稍后重试"
+#define TXT_ERROR_BUSY "音频忙或暂不可用"
+
+#define TXT_ERROR_UPLOAD_TIMEOUT "上传超时，请重试"
+#define TXT_ERROR_UPLOAD "上传失败，请重试"
+#define TXT_ERROR_WAIT_TIMEOUT "等待模型超时，请重试"
+#define TXT_ERROR_WAIT "等待模型失败，请重试"

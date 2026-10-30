@@ -1,4 +1,5 @@
 #include "ai_config.h"
+#include "../app/app_error.h"
 #include "../app/app_strings.h"
 #include "../network/app_network_model.h"
 #include <string.h>
@@ -98,14 +99,4 @@ const char *ai_check_label(ai_check_state_t s){
  return (unsigned)s<sizeof(labels)/sizeof(*labels)?labels[s]:TXT_AI_CHECK_FAIL;
 }
 
-const char *ai_check_error_label(int e){
- if(!e)return "";
- if(e==401||e==403)return TXT_AI_CHECK_AUTH;
- if(e==404)return TXT_AI_CHECK_ROUTE;
- if(e==429)return TXT_AI_CHECK_LIMIT;
- if(e==0x108)return TXT_AI_CHECK_RESPONSE;
- if(e==0x101)return TXT_AI_CHECK_MEMORY;
- if(e==0x103)return TXT_AI_CHECK_NETWORK;
- if(e==0x107)return TXT_AI_CHECK_TIMEOUT;
- return TXT_AI_CHECK_REMOTE;
-}
+const char *ai_check_error_label(int e){return app_error_label(e);}

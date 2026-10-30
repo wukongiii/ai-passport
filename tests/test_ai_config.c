@@ -25,5 +25,10 @@ int main(void){
  r.provider=AI_PROVIDER_COUNT;assert(!ai_config_apply(&c,&r));
  assert(ai_config_name_valid("一二三四五六七八九十甲乙")&&!ai_config_name_valid("一二三四五六七八九十甲乙丙"));
  assert(!ai_config_parse("action=select&slot=4",&r)&&!ai_config_parse("action=select&slot=0&slot=1",&r));
+ const int errors[]={-1,257,258,259,260,263,264,28674,400,401,403,404,408,422,429,500,504,99999};
+ for(unsigned i=0;i<sizeof(errors)/sizeof(*errors);++i)assert(*ai_check_error_label(errors[i]));
+ assert(!strcmp(ai_check_error_label(257),"可用内存不足"));
+ assert(!strcmp(ai_check_error_label(28674),"连接服务失败，请重试"));
+ assert(!*ai_check_error_label(0));
  puts("Unified model configuration: empty defaults, URL/model/key bounds, save/remove/keep-Key and duplicate rejection PASS");
 }

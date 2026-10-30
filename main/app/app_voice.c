@@ -1,4 +1,5 @@
 #include "app_voice.h"
+#include "app_error.h"
 #include "app_strings.h"
 #include "../ai/ai_config.h"
 #include "../network/app_network.h"
@@ -176,7 +177,7 @@ static void render(void *c,const app_module_view_t *v){
         app_header_context(TXT_VOICE_TITLE);lv_label_set_text(qr_text,phrases[state.selected]);
         static const char *const messages[]={TXT_VOICE_READY,TXT_VOICE_WAIT,TXT_VOICE_PLAYING,TXT_VOICE_DONE,TXT_VOICE_FAILED,TXT_VOICE_STOPPING};
         const app_speech_snapshot_t *s=&state.speech;
-        if(state.rejected || s->state==SPEECH_FAILED)lv_label_set_text_fmt(detail,"%s (%d)",TXT_VOICE_FAILED,s->error);
+        if(state.rejected || s->state==SPEECH_FAILED)lv_label_set_text_fmt(detail,"%s (%d)",s->error ? (s->error==0x103 ? TXT_ERROR_BUSY : s->error==-1 ? TXT_ERROR_GENERIC : app_error_label(s->error)) : TXT_ERROR_BUSY,s->error);
         else lv_label_set_text(detail,messages[s->state]);
         lv_label_set_text(note,s->pending && s->state==SPEECH_PLAYING ? TXT_VOICE_PENDING : TXT_VOICE_NOTE);return;
     }

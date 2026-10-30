@@ -40,7 +40,7 @@ void ai_probe_run(unsigned provider,unsigned generation){
  int64_t clock_deadline=esp_timer_get_time()+5000000;
  while(time(NULL)<1700000000&&!cancelled(NULL)&&esp_timer_get_time()<clock_deadline)vTaskDelay(pdMS_TO_TICKS(100));
  if(time(NULL)<1700000000||cancelled(NULL)){error=ESP_ERR_TIMEOUT;goto failed;}
- ai_transport_control_t c={cancelled,NULL};
+ ai_transport_control_t c={.cancel=cancelled};
  memset(game,0,sizeof(*game));strcpy(game->context,"{}");strcpy(game->tools,"[]");
  game->instructions="This is an isolated API capability test. Reply exactly pong. Do not call any tool.";
  error=ai_transport_request(provider,game,"Reply exactly pong.",NULL,0,reply,&c);

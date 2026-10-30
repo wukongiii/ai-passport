@@ -18,6 +18,7 @@ static void memory_stage(const char *stage){
  (void)stage;
  ESP_LOGI(TRANSPORT_TAG,"Memory %s: free=%u largest=%u",stage,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 }
+static void diagnostic_stage(const ai_transport_control_t *c,ai_transport_stage_t stage){if(c&&c->stage)*c->stage=stage;}
 static bool stopped(const ai_transport_control_t *c){return c&&c->cancel&&c->cancel(c->context);}
 enum { UPLOAD_WRITE_BYTES=512, UPLOAD_STALL_US=10000000 };
 static esp_err_t write_all(esp_http_client_handle_t client,const char *data,size_t size,bool tls,const ai_transport_control_t *control){
@@ -50,6 +51,7 @@ static size_t base64(const uint8_t *in,size_t count,char *out){
  out[used++]=alphabet[(n>>18)&63];out[used++]=alphabet[(n>>12)&63];out[used++]=i+1<count?alphabet[(n>>6)&63]:'=';out[used++]=i+2<count?alphabet[n&63]:'=';}return used;
 }
 esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,const char *input,voice_buffer_t *record,unsigned samples,ai_reply_t *decoded,const ai_transport_control_t *control){
+ diagnostic_stage(control,AI_STAGE_PREPARE);
  esp_err_t error=ESP_FAIL;char key[AI_KEY_CAPACITY]={0},model[AI_MODEL_CAPACITY]={0},auth[AI_KEY_CAPACITY+8]={0},url[AI_URL_CAPACITY]={0};
  if(stopped(control)){voice_buffer_release(record);return ESP_ERR_INVALID_STATE;}
  if(!ai_config_connection(selected,key,model,url,NULL)){voice_buffer_release(record);return ESP_ERR_INVALID_STATE;}
@@ -71,10 +73,10 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
  snprintf(auth,sizeof(auth),"Bearer %s",key);error=esp_http_client_set_header(client,"Authorization",auth);if(error==ESP_OK)error=esp_http_client_set_header(client,"Content-Type","application/json");if(error!=ESP_OK)goto done;
  bool tls=!strncmp(url,"https://",8);
  unsigned wav_size=record?44+samples*2:0;size_t total=head_size+4*((wav_size+2)/3)+tail_size;
- stage="TLS connect";memory_stage(stage);
+ diagnostic_stage(control,AI_STAGE_CONNECT);stage="TLS connect";memory_stage(stage);
  error=esp_http_client_open(client,(int)total);memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));if(error!=ESP_OK)goto done;
  esp_http_client_set_timeout_ms(client,1000);
- stage="upload";
+ diagnostic_stage(control,AI_STAGE_UPLOAD);stage="upload";
  error=write_all(client,head,head_size,tls,control);if(error!=ESP_OK)goto done;
  free(head);head=NULL; // Retain the small provider suffix until audio is uploaded.
  uint8_t wav[44],pcm[768];char encoded[1024];voice_wav_header(wav,samples);voice_adpcm_t decoder={0};unsigned position=0;
@@ -91,12 +93,12 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
  if(stopped(control)){error=ESP_ERR_INVALID_STATE;goto done;}
  if(tail_size){error=write_all(client,tail,tail_size,tls,control);if(error!=ESP_OK)goto done;}
  free(head);head=NULL;free(tail);tail=NULL;
- stage="response headers";memory_stage(stage);
+ diagnostic_stage(control,AI_STAGE_WAIT);stage="response headers";memory_stage(stage);
  int64_t headers;
  do{headers=esp_http_client_fetch_headers(client);}while(headers==-ESP_ERR_HTTP_EAGAIN&&!stopped(control));
  if(headers<0||stopped(control)){error=ESP_FAIL;goto done;}
  int status=esp_http_client_get_status_code(client);if(status!=200){error=status;goto done;}
- stage="response buffer";response=malloc(AI_RESPONSE_CAPACITY+1);if(!response){error=ESP_ERR_NO_MEM;goto done;}
+ diagnostic_stage(control,AI_STAGE_READ);stage="response buffer";response=malloc(AI_RESPONSE_CAPACITY+1);if(!response){error=ESP_ERR_NO_MEM;goto done;}
  ai_response_filter_t filter;ai_response_filter_init(&filter,response,AI_RESPONSE_CAPACITY+1,adapter->discard_response_string);
  while(!stopped(control)){
   char chunk[512];int n=esp_http_client_read(client,chunk,sizeof(chunk));
@@ -109,7 +111,7 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
  ESP_LOGI(TRANSPORT_TAG,"Response envelope: wire=%u retained=%u",(unsigned)filter.wire,(unsigned)filter.used);
  size_t used=filter.used;
  esp_http_client_cleanup(client);client=NULL;
- stage="response parser";memory_stage(stage);
+ diagnostic_stage(control,AI_STAGE_PARSE);stage="response parser";memory_stage(stage);
  json=malloc(sizeof(*json));if(!json){error=ESP_ERR_NO_MEM;goto done;}
  response[used]=0;error=!stopped(control)&&adapter->decode(json,response,used,decoded)?ESP_OK:ESP_ERR_INVALID_RESPONSE;
 done:

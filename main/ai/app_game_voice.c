@@ -1,4 +1,5 @@
 #include "app_game_voice.h"
+#include "../app/app_error.h"
 #include "ai_config.h"
 #include "ai_provider.h"
 #include "voice_capture.h"
@@ -23,7 +24,7 @@ static portMUX_TYPE lock=portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t worker;
 static game_voice_snapshot_t view;
 static ai_session_t session;
-typedef struct {ai_game_snapshot_t game;ai_reply_t reply;} voice_job_t;
+typedef struct {ai_game_snapshot_t game;ai_reply_t reply;ai_transport_stage_t stage;} voice_job_t;
 /* Owned from input reservation through owner-side completion; the worker must
  * finish before this mailbox can be freed, including cancellation paths. */
 static voice_job_t *job;
@@ -48,6 +49,7 @@ static void publish(game_voice_state_t state,int error,const char *text){
 }
 static void process_job(void){
   portENTER_CRITICAL(&lock);bool have=queued;queued=false;portEXIT_CRITICAL(&lock);if(!have)return;
+  job->stage=AI_STAGE_PREPARE;
   esp_err_t error=ESP_OK;voice_buffer_t record={0};bool lease=false,audible=false;voice_adpcm_t capture={0};
   // Network time is synchronized in the network service, before verified TLS.
   int64_t clock_deadline=esp_timer_get_time()+5000000;
@@ -77,7 +79,7 @@ finish:
    if(!audible||capture.samples<VOICE_RATE/4){error=ESP_ERR_INVALID_ARG;publish(GAME_VOICE_ERROR,error,TXT_GAME_VOICE_EMPTY);}
    else{
     ESP_LOGI(TAG,"Upload recording: bytes=%u free=%u largest=%u",(unsigned)record.size,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={transport_stop,NULL};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",&record,capture.samples,&job->reply,&control);}
+    publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={.cancel=transport_stop,.stage=&job->stage};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",&record,capture.samples,&job->reply,&control);}
   }
   voice_buffer_release(&record);if(lease)app_speech_capture_release();
   ESP_LOGI(TAG,"Job finished: error=%d free=%u largest=%u",error,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
@@ -159,7 +161,11 @@ bool app_game_voice_tick(ai_game_target_t target,int64_t now){
  portENTER_CRITICAL(&lock);bool done=completed;completed=false;if(done)occupied=false;bool was_cancelled=cancelled;int error=view.error;portEXIT_CRITICAL(&lock);
  if(done){
   if(was_cancelled){publish(GAME_VOICE_IDLE,0,"");}
-  else if(error){ai_session_cancel(&session);if(strcmp(s.text,TXT_GAME_VOICE_EMPTY)){char text[96];snprintf(text,sizeof(text),TXT_GAME_VOICE_FAILED,error);publish(GAME_VOICE_ERROR,error,text);}}
+  else if(error){ai_session_cancel(&session);if(strcmp(s.text,TXT_GAME_VOICE_EMPTY)){char text[AI_TEXT_CAPACITY];
+    const char *reason=app_error_label(error);
+    if(job&&job->stage==AI_STAGE_UPLOAD)reason=error==ESP_ERR_TIMEOUT ? TXT_ERROR_UPLOAD_TIMEOUT : error==ESP_FAIL ? TXT_ERROR_UPLOAD : reason;
+    if(job&&job->stage==AI_STAGE_WAIT)reason=error==ESP_ERR_TIMEOUT ? TXT_ERROR_WAIT_TIMEOUT : error==ESP_FAIL ? TXT_ERROR_WAIT : reason;
+    snprintf(text,sizeof(text),TXT_GAME_VOICE_FAILED,reason,error);publish(GAME_VOICE_ERROR,error,text);}}
   else{ai_completion_t result;ai_flow_result_t flow=ai_session_finish(&session,target,job_token,now,&job->reply,&result);
    if(flow!=AI_FLOW_OK||result.game_result!=AI_GAME_OK)publish(GAME_VOICE_ERROR,0,TXT_GAME_VOICE_REJECT);
    else if(result.executed){

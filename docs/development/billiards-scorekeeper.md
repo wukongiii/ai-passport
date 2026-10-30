@@ -1280,3 +1280,18 @@ and game records are unaffected. Host checks cover fragmented-heap admission,
 low-memory refusal, mute, volume changes, settings confirmation/cancellation,
 range bounds, old-format decoding and phone validation. Actual loudness and
 post-model playback require device listening checks.
+
+
+### Readable voice errors
+
+Gameplay voice and local playback display a short error description followed by
+its numeric diagnostic code. Model detection uses the same code mapping in the
+device UI and phone API. The transport reports the failed stage through an
+optional worker-owned output; gameplay can distinguish upload timeout from
+waiting for a model. Generic -1 errors retain a stage-qualified failure message
+without inventing an allocation, authentication or timeout cause. Known codes
+include 257 (memory), 259 (network/configuration state), 260 (response/data size),
+263 (timeout), 28674 (connection failure), authentication, route, rate-limit and
+server errors; unknown errors retain a generic retry message and their code.
+Neither service replies nor secrets are included in error labels. The model
+snapshot and gameplay state continue to use numeric codes for diagnostics.
