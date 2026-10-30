@@ -1,4 +1,5 @@
 #include "app_speech.h"
+#include "../app/app_preferences.h"
 #include "bsp_audio.h"
 #include "esp_tts.h"
 #include "esp_tts_voice_template.h"
@@ -12,20 +13,27 @@ static const char *TAG="app_speech";
 static portMUX_TYPE lock=portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t worker;
 static speech_model_t model;
-static app_speech_snapshot_t view={.volume=65};
+static app_speech_snapshot_t view={.volume=APP_VOLUME_DEFAULT};
 static unsigned cancel_epoch;
 static bool capture_owned;
 extern const unsigned char voice_data[] asm("_binary_esp_tts_voice_data_xiaoxin_small_dat_start");
 static bool cancelled(unsigned epoch){portENTER_CRITICAL(&lock);bool yes=epoch!=cancel_epoch;portEXIT_CRITICAL(&lock);return yes;}
+static unsigned volume(void){portENTER_CRITICAL(&lock);unsigned v=view.volume;portEXIT_CRITICAL(&lock);return v;}
 static esp_err_t speak(const char *text,unsigned epoch){
+    unsigned applied=volume();if(!applied || cancelled(epoch))return ESP_OK;
     // The vendor's prebuilt routines assume their small allocations succeed.
     // Leave headroom for AMR decoding, codec DMA and networking.
-    if(esp_get_free_heap_size()<70000 || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)<40000)return ESP_ERR_NO_MEM;
+    // Native-speed AMR decoding's largest fixed allocation in the pinned C3
+    // library is 4392 bytes; the old 40KB gate included the unused stretcher.
+    // Keep total headroom and a conservative contiguous reserve, then check
+    // again after codec DMA has been allocated before entering vendor code.
+    if(esp_get_free_heap_size()<70000 || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)<16384)return ESP_ERR_NO_MEM;
     esp_err_t error=bsp_audio_init();
     if(error==ESP_OK)error=bsp_audio_wake();
     if(error==ESP_OK)error=bsp_audio_set_format(16000,16,1);
     if(error!=ESP_OK)return error;
-    bsp_audio_set_volume(65);
+    if(esp_get_free_heap_size()<48000 || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)<12288){bsp_audio_sleep();return ESP_ERR_NO_MEM;}
+    bsp_audio_set_volume((uint8_t)applied);
     esp_tts_voice_t *voice=esp_tts_voice_set_init(&esp_tts_voice_template,(void *)voice_data);
     esp_tts_handle_t tts=voice ? esp_tts_create(voice) : NULL;
     if(!tts)error=ESP_ERR_NO_MEM;
@@ -44,6 +52,8 @@ static esp_err_t speak(const char *text,unsigned epoch){
                 if(count==0)break;
                 if(!pcm || count<0 || count>16000 || esp_timer_get_time()>deadline){error=ESP_FAIL;break;}
                 for(int at=0;at<count && !cancelled(epoch);){
+                    unsigned requested=volume();
+                    if(requested!=applied){bsp_audio_set_volume((uint8_t)requested);applied=requested;}
                     int n=count-at;if(n>320)n=320;
                     error=bsp_audio_write(pcm+at,(size_t)n*sizeof(*pcm));
                     if(error!=ESP_OK)break;
@@ -103,6 +113,10 @@ void app_speech_stop(void){
     portENTER_CRITICAL(&lock);speech_model_cancel(&model);++cancel_epoch;view.pending=false;
     view.state=view.state==SPEECH_PLAYING || view.state==SPEECH_STOPPING ? SPEECH_STOPPING : SPEECH_IDLE;view.error=0;++view.revision;
     portEXIT_CRITICAL(&lock);if(worker)xTaskNotifyGive(worker);
+}
+void app_speech_set_volume(unsigned percent){
+    if(percent>100)percent=100;
+    portENTER_CRITICAL(&lock);if(view.volume!=percent){view.volume=percent;++view.revision;}portEXIT_CRITICAL(&lock);
 }
 void app_speech_snapshot(app_speech_snapshot_t *out){portENTER_CRITICAL(&lock);*out=view;portEXIT_CRITICAL(&lock);}
 

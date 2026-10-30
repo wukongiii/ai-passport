@@ -48,6 +48,7 @@ bool app_network_take_preferences(app_preferences_t *p){(void)p;return false;}
 static app_speech_snapshot_t speech_preview={.volume=65};
 bool app_speech_start(void){return true;}
 bool app_speech_say(const char *text){(void)text;speech_preview.state=SPEECH_WAITING;speech_preview.pending=true;++speech_preview.revision;return true;}
+void app_speech_set_volume(unsigned v){speech_preview.volume=v;}
 void app_speech_stop(void){speech_preview.state=SPEECH_IDLE;speech_preview.pending=false;++speech_preview.revision;}
 void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_preview;}
 static ai_config_snapshot_t ai_preview={.ready=true,.active=AI_PROVIDER_NONE};
@@ -238,10 +239,19 @@ int main(void) {
     app.page=APP_PAGE_HOME; app.focus=3;
     app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");
     capture("settings-direction");
+    // Volume range shares layout and semantic hints at both rotations.
+    app_container_input(&app,0,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-volume-270");
+    app_container_input(&app,1,APP_GESTURE_LONG);
+    app_container_input(&app,2,APP_GESTURE_SHORT);
     app_container_input(&app,1,APP_GESTURE_SHORT);
     app_container_input(&app,2,APP_GESTURE_SHORT);
     app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");
     assert(app.rotation==APP_ROTATION_90);
+    app_container_input(&app,0,APP_GESTURE_SHORT);
+    app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-volume-90");
+    app_container_input(&app,1,APP_GESTURE_LONG);
+    app_container_input(&app,2,APP_GESTURE_SHORT);
     app_container_input(&app,2,APP_GESTURE_SHORT);
     app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");capture("settings-brightness-90");
     app_container_input(&app,0,APP_GESTURE_SHORT);

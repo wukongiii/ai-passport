@@ -4,7 +4,9 @@ typedef struct {
     app_rotation_t rotation;
     uint8_t brightness;
     uint16_t dim_seconds, blank_seconds; // 0 disables the corresponding timer.
+    uint8_t volume; // 0 mutes local speech.
 } app_preferences_t;
+enum { APP_VOLUME_DEFAULT=60, APP_VOLUME_STEP=10 };
 enum { APP_PREFERENCES_SIZE = 16 };
 app_preferences_t app_preferences_default(void);
 bool app_preferences_valid(const app_preferences_t *p);

@@ -152,6 +152,7 @@ static esp_err_t status(httpd_req_t *r){
     cJSON_AddNumberToObject(body,"seconds",s.seconds_left);cJSON_AddStringToObject(body,"ip",s.ip);
     cJSON_AddStringToObject(body,"ssid",s.ssid);cJSON_AddStringToObject(body,"token",session_token);
     cJSON_AddNumberToObject(body,"rotation",p.rotation);cJSON_AddNumberToObject(body,"brightness",p.brightness);
+    cJSON_AddNumberToObject(body,"volume",p.volume);
     cJSON_AddNumberToObject(body,"dim",p.dim_seconds);cJSON_AddNumberToObject(body,"blank",p.blank_seconds);
     cJSON_AddNumberToObject(body,"error",s.error);cJSON_AddNumberToObject(body,"save_error",s.save_error);
     cJSON_AddNumberToObject(body,"issue",app_net_issue(s.reason));cJSON_AddNumberToObject(body,"attempt",s.attempt);

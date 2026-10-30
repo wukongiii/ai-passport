@@ -24,6 +24,9 @@ bool app_settings_model_input(app_settings_model_t *m, app_preferences_t *p, uns
     case APP_SETTING_BRIGHTNESS:
         if((delta<0 && m->draft.brightness>20)||(delta>0 && m->draft.brightness<100)) m->draft.brightness+=10*delta;
         break;
+    case APP_SETTING_VOLUME:
+        if((delta<0 && m->draft.volume>0)||(delta>0 && m->draft.volume<100))m->draft.volume+=APP_VOLUME_STEP*delta;
+        break;
     case APP_SETTING_DIM: m->draft.dim_seconds=step(m->draft.dim_seconds,dims,5,delta); break;
     case APP_SETTING_BLANK: m->draft.blank_seconds=step(m->draft.blank_seconds,blanks,5,delta); break;
     default: break;
@@ -33,6 +36,7 @@ bool app_settings_model_input(app_settings_model_t *m, app_preferences_t *p, uns
 
 unsigned app_settings_range_index(const app_settings_model_t *m, const app_preferences_t *p) {
     const app_preferences_t *v=m->editing ? &m->draft : p;
+    if(m->focus==APP_SETTING_VOLUME)return v->volume/APP_VOLUME_STEP;
     if(m->focus==APP_SETTING_BRIGHTNESS) return (v->brightness-20)/10;
     static const uint16_t dims[]={15,30,60,120,0}, blanks[]={60,120,300,600,0};
     const uint16_t *values=m->focus==APP_SETTING_DIM ? dims : blanks;

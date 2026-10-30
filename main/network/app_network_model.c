@@ -43,9 +43,9 @@ static bool number(const char *form,const char *key,unsigned *out){
     *out=(unsigned)strtoul(b,NULL,10);return true;
 }
 bool app_net_parse_preferences(const char *form,app_preferences_t *out){
-    unsigned r,b,d,k;
-    if(!number(form,"rotation",&r)||!number(form,"brightness",&b)||!number(form,"dim",&d)||!number(form,"blank",&k) || b>255 || d>65535 || k>65535)return false;
-    app_preferences_t p={.rotation=(app_rotation_t)r,.brightness=(uint8_t)b,.dim_seconds=(uint16_t)d,.blank_seconds=(uint16_t)k};
+    unsigned r,b,d,k,v;
+    if(!number(form,"rotation",&r)||!number(form,"brightness",&b)||!number(form,"dim",&d)||!number(form,"blank",&k)||!number(form,"volume",&v) || v>100 || b>255 || d>65535 || k>65535)return false;
+    app_preferences_t p={.rotation=(app_rotation_t)r,.brightness=(uint8_t)b,.dim_seconds=(uint16_t)d,.blank_seconds=(uint16_t)k,.volume=(uint8_t)v};
     if(!app_preferences_valid(&p))return false;
     *out=p;return true;
 }

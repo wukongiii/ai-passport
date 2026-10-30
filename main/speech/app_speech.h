@@ -8,6 +8,8 @@ typedef struct {speech_state_t state;unsigned revision;int error;bool pending;un
 bool app_speech_start(void);
 bool app_speech_say(const char *text);
 void app_speech_stop(void);
+/* Non-blocking mailbox; only the speech worker touches the codec. */
+void app_speech_set_volume(unsigned percent);
 void app_speech_snapshot(app_speech_snapshot_t *);
 
 /* Worker-side codec lease. Acquire only after playback has stopped; while held,

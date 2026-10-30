@@ -2,6 +2,7 @@
 #include "app_settings_model.h"
 #include "app_preferences_store.h"
 #include "app_strings.h"
+#include "../speech/app_speech.h"
 #include "../network/app_network.h"
 #include "../network/network_setup_ui.h"
 #include "../ui/app_header.h"
@@ -27,7 +28,7 @@ static net_setup_ui_t network_ui;
 static bool network_mounted;
 static void create_settings_content(void);
 static app_range_t range;
-static const char *names[]={TXT_APP_DIRECTION,TXT_APP_BRIGHTNESS,TXT_APP_DIM,TXT_APP_BLANK,TXT_APP_INFO,TXT_APP_NETWORK};
+static const char *names[]={TXT_APP_DIRECTION,TXT_APP_BRIGHTNESS,TXT_APP_DIM,TXT_APP_BLANK,TXT_APP_INFO,TXT_APP_NETWORK,TXT_APP_VOLUME};
 const app_preferences_t *app_settings_preferences(void) {return &state.preferences;}
 uint8_t app_settings_preview_brightness(void) {
     return state.active && state.model.editing && state.model.focus==APP_SETTING_BRIGHTNESS ? state.model.draft.brightness : state.preferences.brightness;
@@ -54,7 +55,7 @@ static void bindings(void *c, app_bindings_t *b) {
     if(edit) {
         const bool direction=state.model.focus==APP_SETTING_DIRECTION;
         const unsigned index=app_settings_range_index(&state.model,&state.preferences);
-        const unsigned maximum=state.model.focus==APP_SETTING_BRIGHTNESS ? 8 : 4;
+        const unsigned maximum=state.model.focus==APP_SETTING_VOLUME ? 100/APP_VOLUME_STEP : state.model.focus==APP_SETTING_BRIGHTNESS ? 8 : 4;
         app_actions_register(b,0,APP_GESTURE_SHORT,direction ? LEFT : MINUS,direction ? TXT_APP_PREVIOUS : TXT_APP_REDUCE,direction || index>0,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_SHORT,APPLY,TXT_APP_CONFIRM,true,APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,direction ? RIGHT : PLUS,direction ? TXT_APP_NEXT : TXT_APP_INCREASE,direction || index<maximum,APP_ACTION_NAVIGATE);
@@ -116,6 +117,7 @@ static bool tick(void *c, int64_t now) {
         state.dirty=true;state.last_save=0;changed=true;
     }
     app_network_publish_preferences(&state.preferences);
+    app_speech_set_volume(state.preferences.volume);
     if(!state.dirty || (state.last_save && now-state.last_save<5000000)) return changed;
     state.last_save=now;state.dirty=app_preferences_save(&state.preferences)!=ESP_OK;
     state.storage=state.dirty ? TXT_APP_PREF_FAILED : TXT_APP_PREF_SAVED;return true;
@@ -160,7 +162,7 @@ static void render(void *c,const app_module_view_t *v) {
     lv_obj_set_style_text_font(info,&score_font_16,0);
     lv_obj_set_style_text_font(status,&score_font_16,0);
     lv_obj_set_style_text_color(name,lv_color_hex(0xF2F3E9),0);
-    const bool is_range=m->focus>=APP_SETTING_BRIGHTNESS && m->focus<=APP_SETTING_BLANK;
+    const bool is_range=(m->focus>=APP_SETTING_BRIGHTNESS && m->focus<=APP_SETTING_BLANK) || m->focus==APP_SETTING_VOLUME;
 
     visible(range.root,is_range);visible(name,m->focus==APP_SETTING_NETWORK);visible(value,m->focus==APP_SETTING_NETWORK);visible(info,m->focus==APP_SETTING_INFO || m->focus==APP_SETTING_NETWORK);
     for(unsigned i=0;i<2;++i){
@@ -170,13 +172,13 @@ static void render(void *c,const app_module_view_t *v) {
         lv_obj_set_style_bg_color(direction_rows[i],lv_color_hex(selected ? 0x246B4E : 0x1C303B),0);
     }
     if(is_range) {
-        char current[32];const bool brightness=m->focus==APP_SETTING_BRIGHTNESS;
+        char current[32];const bool brightness=m->focus==APP_SETTING_BRIGHTNESS,volume=m->focus==APP_SETTING_VOLUME;
         unsigned seconds=m->focus==APP_SETTING_DIM ? p->dim_seconds : p->blank_seconds;
-        if(brightness)snprintf(current,sizeof(current),"%u%%",p->brightness);
+        if(brightness || volume)snprintf(current,sizeof(current),"%u%%",volume ? p->volume : p->brightness);
         else if(seconds)snprintf(current,sizeof(current),TXT_APP_SECONDS,seconds);
         else snprintf(current,sizeof(current),"%s",TXT_APP_UNLIMITED);
-        app_range_render(&range,app_settings_range_index(m,&state.preferences),brightness ? 8 : 4,current,
-            brightness ? "20%" : m->focus==APP_SETTING_DIM ? "15 s" : "60 s",brightness ? "100%" : TXT_APP_UNLIMITED,m->editing);
+        app_range_render(&range,app_settings_range_index(m,&state.preferences),volume ? 100/APP_VOLUME_STEP : brightness ? 8 : 4,current,
+            volume ? "0%" : brightness ? "20%" : m->focus==APP_SETTING_DIM ? "15 s" : "60 s",brightness || volume ? "100%" : TXT_APP_UNLIMITED,m->editing);
     } else if(m->focus==APP_SETTING_DIRECTION) {}
     else if(m->focus==APP_SETTING_NETWORK){
         char ssid[100];net_setup_display_ssid(state.network.ssid,ssid,sizeof(ssid));

@@ -19,6 +19,7 @@
 #define TXT_APP_BACK "返回"
 #define TXT_APP_HOME "大厅"
 #define TXT_APP_UI_FAILED "界面加载失败，请返回大厅"
+#define TXT_APP_VOLUME "播报音量"
 #define TXT_APP_BRIGHTNESS "屏幕亮度"
 #define TXT_APP_DIM "自动调暗"
 #define TXT_APP_BLANK "自动灭屏"

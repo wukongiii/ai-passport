@@ -1257,3 +1257,26 @@ matching ELF SHA-256 is
 A captured pre-fix error 260 occurred at response-buffer capacity. Whether its
 oversized field was reasoning was not established because payloads are not
 logged. Real-model acceptance of this revision remains pending.
+
+
+### Speech admission and shared volume
+
+A device request succeeded but speech was rejected with 84096 bytes free and a
+34816-byte largest block by the former 40000-byte contiguous admission gate.
+Native-speed playback bypasses the stretcher: the pinned C3 AMR decoder's
+largest fixed allocation is 4392 bytes. Admission retains 70000 bytes total
+headroom and requires a conservative 16384-byte block before audio setup, then
+checks 48000 total / 12288 contiguous after codec/DMA allocation before entering
+the vendor routines. This is a bounded admission heuristic, not a guarantee
+against concurrent allocator pressure; capture and synthesis stay exclusive.
+
+Application settings and the phone's Display and sound section share a saved
+0–100% speech-volume slider in 10% steps, default 60%; zero mutes playback.
+The speech worker alone applies codec volume, including changes between PCM
+chunks. Settings callbacks only update a mailbox. Existing version-1 display
+preferences decode with their original values and the default volume; version-2
+records store volume without changing the 16-byte size. Wi-Fi, model profiles
+and game records are unaffected. Host checks cover fragmented-heap admission,
+low-memory refusal, mute, volume changes, settings confirmation/cancellation,
+range bounds, old-format decoding and phone validation. Actual loudness and
+post-model playback require device listening checks.

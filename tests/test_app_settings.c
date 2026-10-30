@@ -34,5 +34,18 @@ int main(void) {
     app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
     assert(m.draft.rotation==APP_ROTATION_270 && p.rotation==APP_ROTATION_90);
     assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT) && p.rotation==APP_ROTATION_270);
+    app_settings_model_enter(&m,&p);m.focus=APP_SETTING_VOLUME;
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
+    app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);
+    assert(m.draft.volume==50&&p.volume==APP_VOLUME_DEFAULT);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(p.volume==APP_VOLUME_DEFAULT);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
+    for(unsigned i=0;i<20;++i)app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
+    assert(m.draft.volume==100&&app_settings_range_index(&m,&p)==10);
+    assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT)&&p.volume==100);
+    app_preferences_encode(&p,b);assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100);
+    // Previous format retains display settings and supplies the default volume.
+    b[2]=1;b[9]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
+    assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==APP_VOLUME_DEFAULT&&decoded.brightness==p.brightness);
     puts("Settings codec, corruption, idle thresholds, preview/cancel/confirm and infinity endpoint: PASS");
 }
