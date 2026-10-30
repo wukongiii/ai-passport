@@ -79,6 +79,8 @@ void app_main(void) {
         s_input_queue = NULL;
         return;
     }
+    unsigned applied_double=app_settings_preferences()->double_click_ms;
+    ESP_ERROR_CHECK(bsp_button_set_double_click_ms(applied_double));
     key_guard_sync_released(&s_key_guard, bsp_button_read_mv() >= BSP_BTN_MV_RELEASED_MIN);
     s_input_ready = true;
     int battery = battery_ready ? bsp_battery_soc() : -1;
@@ -136,6 +138,8 @@ void app_main(void) {
         const app_rotation_t before_network=s_app.rotation;
         // Inactive games still get persistence retries, outside the UI lock.
         if (app_container_tick(&s_app, now)) render = true;
+        unsigned requested_double=app_settings_preferences()->double_click_ms;
+        if(requested_double!=applied_double && bsp_button_set_double_click_ms(requested_double)==ESP_OK)applied_double=requested_double;
         if(app_game_voice_tick(app_container_ai_target(&s_app),now)){render=true;last_input=now;}
         if(s_app.rotation==before_network && before_network!=app_settings_preferences()->rotation){
             s_app.rotation=app_settings_preferences()->rotation;render=true;

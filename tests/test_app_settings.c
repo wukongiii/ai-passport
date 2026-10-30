@@ -13,6 +13,8 @@ int main(void) {
     assert(app_preferences_backlight(&p,120000000)==0);
     p.dim_seconds=p.blank_seconds=0;assert(app_preferences_backlight(&p,99999999999)==80);
     app_settings_model_t m;app_settings_model_enter(&m,&p);
+    assert(!m.submenu&&m.group==APP_SETTINGS_DISPLAY);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);assert(m.submenu&&!m.editing);
     app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
     app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
     assert(p.rotation==APP_ROTATION_270 && m.draft.rotation==APP_ROTATION_90);
@@ -29,12 +31,12 @@ int main(void) {
     app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);assert(m.draft.dim_seconds==120);
     app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);assert(m.draft.dim_seconds==60);
     app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(p.dim_seconds==0);
-    app_settings_model_enter(&m,&p);p.rotation=APP_ROTATION_90;m.draft=p;
+    app_settings_model_enter(&m,&p);m.submenu=true;p.rotation=APP_ROTATION_90;m.draft=p;
     app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
     app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
     assert(m.draft.rotation==APP_ROTATION_270 && p.rotation==APP_ROTATION_90);
     assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT) && p.rotation==APP_ROTATION_270);
-    app_settings_model_enter(&m,&p);m.focus=APP_SETTING_VOLUME;
+    app_settings_model_enter(&m,&p);m.submenu=true;m.group=APP_SETTINGS_SOUND;m.focus=APP_SETTING_VOLUME;
     app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
     app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);
     assert(m.draft.volume==50&&p.volume==APP_VOLUME_DEFAULT);
@@ -45,7 +47,18 @@ int main(void) {
     assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT)&&p.volume==100);
     app_preferences_encode(&p,b);assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100);
     // Previous format retains display settings and supplies the default volume.
-    b[2]=1;b[9]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
+    b[2]=1;b[9]=b[10]=b[11]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
     assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==APP_VOLUME_DEFAULT&&decoded.brightness==p.brightness);
+    // Version 2 keeps volume/display and defaults the new operation preference.
+    app_preferences_encode(&p,b);b[2]=2;b[10]=b[11]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
+    assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100&&decoded.double_click_ms==350);
+    app_settings_model_enter(&m,&p);
+    for(unsigned i=0;i<2;++i)app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
+    assert(m.group==APP_SETTINGS_OPERATION&&!m.submenu);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);assert(m.focus==APP_SETTING_DOUBLE&&m.submenu);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
+    app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);assert(m.draft.double_click_ms==400&&p.double_click_ms==350);
+    assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT)&&p.double_click_ms==400);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(!m.submenu&&m.group==APP_SETTINGS_OPERATION);
     puts("Settings codec, corruption, idle thresholds, preview/cancel/confirm and infinity endpoint: PASS");
 }

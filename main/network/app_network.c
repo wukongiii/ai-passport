@@ -7,6 +7,7 @@
 #include "../games/game_preferences.h"
 #include "cJSON.h"
 #include "esp_event.h"
+#include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -155,6 +156,8 @@ static esp_err_t status(httpd_req_t *r){
     cJSON_AddStringToObject(body,"ssid",s.ssid);cJSON_AddStringToObject(body,"token",session_token);
     cJSON_AddNumberToObject(body,"rotation",p.rotation);cJSON_AddNumberToObject(body,"brightness",p.brightness);
     cJSON_AddNumberToObject(body,"volume",p.volume);
+    cJSON_AddNumberToObject(body,"double_click_ms",p.double_click_ms);
+    cJSON_AddStringToObject(body,"version",esp_app_get_description()->version);
     cJSON_AddNumberToObject(body,"dim",p.dim_seconds);cJSON_AddNumberToObject(body,"blank",p.blank_seconds);
     cJSON_AddNumberToObject(body,"error",s.error);cJSON_AddNumberToObject(body,"save_error",s.save_error);
     cJSON_AddNumberToObject(body,"issue",app_net_issue(s.reason));cJSON_AddNumberToObject(body,"attempt",s.attempt);
@@ -329,8 +332,10 @@ static esp_err_t submit(httpd_req_t *r){
             if(ok && xQueueSend(commands,&c,0)!=pdTRUE){portENTER_CRITICAL(&lock);accepting_connect=false;portEXIT_CRITICAL(&lock);ok=false;}}
         memset(&c,0,sizeof(c));
     }else{
-        app_preferences_t p;ok=app_net_parse_preferences(form,&p);
-        if(ok){portENTER_CRITICAL(&lock);ok=!preferences_pending;if(ok){pending_preferences=p;preferences_pending=true;}portEXIT_CRITICAL(&lock);}
+        app_preferences_t p;portENTER_CRITICAL(&lock);
+        ok=!preferences_pending&&app_net_patch_preferences(form,&preferences,&p);
+        if(ok){pending_preferences=p;preferences_pending=true;}
+        portEXIT_CRITICAL(&lock);
     }
     memset(form,0,sizeof(form));headers(r);
     if(!ok)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Invalid values or device busy; retry shortly");

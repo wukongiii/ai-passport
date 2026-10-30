@@ -10,6 +10,8 @@ static int adc_token, cal_token, adc_live, cal_live, live_buttons;
 static int create_calls, callback_calls, fail_create, fail_callback;
 static int fail_adc, fail_channel, fail_cal, fail_read, fail_convert, fail_delete;
 static int raw_mv, reads, events;
+static unsigned param_calls,param_ms;
+esp_err_t iot_button_set_param(button_handle_t h,button_param_t p,void *v){assert(h&&h->live&&p==BUTTON_SHORT_PRESS_TIME_MS);++param_calls;param_ms=(unsigned)(uintptr_t)v;return ESP_OK;}
 static int64_t clock_us;
 
 esp_err_t adc_oneshot_new_unit(const adc_oneshot_unit_init_cfg_t *cfg, adc_oneshot_unit_handle_t *h) {
@@ -117,6 +119,8 @@ static void check_deep_sleep_prepare(void) {
     fail_gpio = 0; gpio_level = 1;
     assert(bsp_button_init(event_cb, &events) == ESP_OK);
 
+    assert(bsp_button_set_double_click_ms(350)==ESP_OK&&param_calls==3&&param_ms==350);
+    assert(bsp_button_set_double_click_ms(451)==ESP_ERR_INVALID_ARG);
     int level = -1;
     assert(bsp_button_prepare_deep_sleep(&level) == ESP_OK);
     assert(level == 1);
@@ -125,7 +129,8 @@ static void check_deep_sleep_prepare(void) {
     assert(gpio_last_pin == BSP_BTN_GPIO);
     assert(gpio_last_mode == GPIO_MODE_INPUT);
     assert(gpio_last_pull == GPIO_PULLUP_ONLY);
-    assert_clean();                                 // nothing may touch the pad afterwards
+    assert_clean();
+    assert(bsp_button_set_double_click_ms(350)==ESP_ERR_INVALID_STATE); // nothing may touch the pad afterwards
 
     // A key still held low is reported as 0 so the caller can refuse to sleep.
     gpio_level = 0; level = -1;

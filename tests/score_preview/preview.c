@@ -239,55 +239,48 @@ int main(void) {
     }
     game_voice_preview=(game_voice_snapshot_t){0};
     app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,85,""); capture("return-home");
-    // Settings: finite key-screen coverage and confirmed direction through container.
-    app_settings_device_info(91,4093,"cdd94cd-dirty");
-    app.page=APP_PAGE_HOME; app.focus=3;
-    app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");
-    capture("settings-direction");
-    // Volume range shares layout and semantic hints at both rotations.
-    app_container_input(&app,0,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-volume-270");
-    app_container_input(&app,1,APP_GESTURE_LONG);
-    app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT);
-    app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");
-    assert(app.rotation==APP_ROTATION_90);
-    app_container_input(&app,0,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-volume-90");
-    app_container_input(&app,1,APP_GESTURE_LONG);
-    app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT); app_ui_render(&app,91,"");capture("settings-brightness-90");
-    app_container_input(&app,0,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_LONG);
-    assert(app_settings_preferences()->brightness==80 && app_settings_preview_brightness()==80);
-    app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT);
-    for(unsigned i=0;i<3;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_ui_render(&app,91,"");capture("settings-infinity-90");
-    app_container_input(&app,1,APP_GESTURE_SHORT);
-    assert(app_settings_preferences()->dim_seconds==0);
-    app_container_input(&app,2,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-blank-90");
-    app_container_input(&app,2,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-info-90");
-    app_container_input(&app,1,APP_GESTURE_LONG);
-    app.rotation=APP_ROTATION_270; app.focus=3;
-    app_container_input(&app,1,APP_GESTURE_SHORT);
-    app_container_input(&app,2,APP_GESTURE_SHORT);
-    app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture("settings-brightness-270");
-    app_container_input(&app,1,APP_GESTURE_LONG);
-    app_container_input(&app,1,APP_GESTURE_LONG); app_ui_render(&app,91,"");
+    // Hierarchical settings and adjustable gestures, both landscape orientations.
+    app_settings_device_info(91,4093,"settings-preview");
+    for(unsigned r=0;r<2;++r){
+        app.rotation=r?APP_ROTATION_90:APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=3;
+        app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_SHORT);
+        if(app_settings_preferences()->rotation!=(r?APP_ROTATION_90:APP_ROTATION_270)){app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);}
+        app_container_input(&app,1,APP_GESTURE_LONG);
+        assert(app.rotation==(r?APP_ROTATION_90:APP_ROTATION_270));
+        app_ui_render(&app,91,"");capture(r?"settings-groups-90":"settings-groups-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r?"settings-direction-90":"settings-direction-270");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-brightness-90":"settings-brightness-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);assert(app_settings_preview_brightness()==70);
+        app_container_input(&app,1,APP_GESTURE_LONG);assert(app_settings_preview_brightness()==80);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        for(unsigned i=0;i<3;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-infinity-90":"settings-infinity-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
+        assert(app.page==APP_PAGE_MODULE);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-volume-90":"settings-volume-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-double-90":"settings-double-270");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);
+        assert(app_settings_preferences()->double_click_ms==350);
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-info-90":"settings-info-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);assert(app.page==APP_PAGE_HOME);
+    }
     // Network settings entry, hotspot details, clear-confirm and both orientations.
     for(unsigned r=0;r<2;++r){
         app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=3;
         app_container_input(&app,1,APP_GESTURE_SHORT);
-        if(app_settings_preferences()->rotation!=app.rotation){
-            app_container_input(&app,1,APP_GESTURE_SHORT);
-            app_container_input(&app,2,APP_GESTURE_SHORT);
-            app_container_input(&app,1,APP_GESTURE_SHORT);
+        // Match persisted direction through the display subgroup before network testing.
+        app_container_input(&app,1,APP_GESTURE_SHORT);
+        if(app_settings_preferences()->rotation!=(r?APP_ROTATION_90:APP_ROTATION_270)){
+            app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         }
-        assert(app.rotation==(r ? APP_ROTATION_90 : APP_ROTATION_270));
-        for(unsigned i=0;i<5;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r ? "network-summary-offline-90" : "network-summary-offline-270");
         net_preview.state=APP_NET_CONNECTED;
         snprintf(net_preview.ssid,sizeof(net_preview.ssid),"台球室网络");
@@ -295,8 +288,8 @@ int main(void) {
         app_container_tick(&app,1800000);app_ui_render(&app,91,"");capture(r ? "network-summary-connected-90" : "network-summary-connected-270");
         snprintf(net_preview.ssid,sizeof(net_preview.ssid),"ABCDEFGHIJKLMNOPQRSTUVWXYZ123456");net_preview.revision++;
         app_container_tick(&app,1900000);app_ui_render(&app,91,"");capture(r ? "network-summary-long-90" : "network-summary-long-270");
-        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-summary-to-info-90" : "network-summary-to-info-270");
-        app_container_input(&app,2,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-summary-return-90" : "network-summary-return-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-summary-to-info-90" : "network-summary-to-info-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-summary-return-90" : "network-summary-return-270");
         net_preview.state=APP_NET_OFFLINE;net_preview.ssid[0]=0;net_preview.ip[0]=0;net_preview.revision++;
         app_container_tick(&app,1950000);
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");

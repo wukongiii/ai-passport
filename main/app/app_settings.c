@@ -23,12 +23,13 @@ static struct {
     int battery, millivolts;
     const char *version, *storage;
 } state;
-static lv_obj_t *content,*name,*value,*hint,*status,*info,*direction_rows[2];
+static lv_obj_t *content,*name,*value,*hint,*status,*info,*direction_rows[2],*group_rows[3];
 static net_setup_ui_t network_ui;
 static bool network_mounted;
 static void create_settings_content(void);
 static app_range_t range;
-static const char *names[]={TXT_APP_DIRECTION,TXT_APP_BRIGHTNESS,TXT_APP_DIM,TXT_APP_BLANK,TXT_APP_INFO,TXT_APP_NETWORK,TXT_APP_VOLUME};
+static const char *names[]={TXT_APP_DIRECTION,TXT_APP_BRIGHTNESS,TXT_APP_DIM,TXT_APP_BLANK,TXT_APP_INFO,TXT_APP_NETWORK,TXT_APP_VOLUME,TXT_SETTINGS_DOUBLE};
+static const char *groups[]={TXT_SETTINGS_DISPLAY,TXT_SETTINGS_SOUND,TXT_SETTINGS_OPERATION,TXT_SETTINGS_ABOUT,TXT_SETTINGS_NETWORK};
 const app_preferences_t *app_settings_preferences(void) {return &state.preferences;}
 uint8_t app_settings_preview_brightness(void) {
     return state.active && state.model.editing && state.model.focus==APP_SETTING_BRIGHTNESS ? state.model.draft.brightness : state.preferences.brightness;
@@ -51,19 +52,20 @@ enum { PREV=100,NEXT,OPEN,BACK,MINUS,PLUS,APPLY,LEFT,RIGHT,PORTAL,RETRY,FORGET }
 static void bindings(void *c, app_bindings_t *b) {
     (void)c; app_actions_clear(b);
     if(state.network_page){net_setup_bindings(&state.setup,&state.network,b);return;}
+    if(state.model.submenu && !state.model.editing)app_actions_register(b,1,APP_GESTURE_LONG,BACK,TXT_APP_BACK,true,APP_ACTION_BACK);
     const bool edit=state.model.editing;
     if(edit) {
         const bool direction=state.model.focus==APP_SETTING_DIRECTION;
         const unsigned index=app_settings_range_index(&state.model,&state.preferences);
-        const unsigned maximum=state.model.focus==APP_SETTING_VOLUME ? 100/APP_VOLUME_STEP : state.model.focus==APP_SETTING_BRIGHTNESS ? 8 : 4;
+        const unsigned maximum=state.model.focus==APP_SETTING_DOUBLE ? (APP_DOUBLE_MAX-APP_DOUBLE_MIN)/APP_DOUBLE_STEP : state.model.focus==APP_SETTING_VOLUME ? 100/APP_VOLUME_STEP : state.model.focus==APP_SETTING_BRIGHTNESS ? 8 : 4;
         app_actions_register(b,0,APP_GESTURE_SHORT,direction ? LEFT : MINUS,direction ? TXT_APP_PREVIOUS : TXT_APP_REDUCE,direction || index>0,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_SHORT,APPLY,TXT_APP_CONFIRM,true,APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,direction ? RIGHT : PLUS,direction ? TXT_APP_NEXT : TXT_APP_INCREASE,direction || index<maximum,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_LONG,BACK,TXT_APP_CANCEL,true,APP_ACTION_CANCEL);
     } else {
-        app_actions_register(b,0,APP_GESTURE_SHORT,PREV,TXT_APP_PREVIOUS,true,APP_ACTION_NAVIGATE);
-        app_actions_register(b,1,APP_GESTURE_SHORT,OPEN,state.model.focus==APP_SETTING_NETWORK ? TXT_APP_ENTER : TXT_APP_ADJUST,state.model.focus!=APP_SETTING_INFO,APP_ACTION_CONFIRM);
-        app_actions_register(b,2,APP_GESTURE_SHORT,NEXT,TXT_APP_NEXT,true,APP_ACTION_NAVIGATE);
+        app_actions_register(b,0,APP_GESTURE_SHORT,PREV,TXT_APP_PREVIOUS,!state.model.submenu || state.model.group==APP_SETTINGS_DISPLAY,APP_ACTION_NAVIGATE);
+        app_actions_register(b,1,APP_GESTURE_SHORT,OPEN,!state.model.submenu || state.model.focus==APP_SETTING_NETWORK ? TXT_APP_ENTER : TXT_APP_ADJUST,!state.model.submenu || state.model.focus!=APP_SETTING_INFO,APP_ACTION_CONFIRM);
+        app_actions_register(b,2,APP_GESTURE_SHORT,NEXT,TXT_APP_NEXT,!state.model.submenu || state.model.group==APP_SETTINGS_DISPLAY,APP_ACTION_NAVIGATE);
     }
 }
 static app_module_effect_t input(void *c, app_rotation_t rotation, unsigned slot, app_gesture_t gesture) {
@@ -91,7 +93,7 @@ static app_module_effect_t input(void *c, app_rotation_t rotation, unsigned slot
         }
         return (app_module_effect_t){false,rotation};
     }
-    if(!state.model.editing && state.model.focus==APP_SETTING_NETWORK && slot==1 && gesture==APP_GESTURE_SHORT){
+    if(state.model.submenu && !state.model.editing && state.model.focus==APP_SETTING_NETWORK && slot==1 && gesture==APP_GESTURE_SHORT){
         state.network_page=true;net_setup_begin(&state.setup);return (app_module_effect_t){false,rotation};
     }
     if(app_settings_model_input(&state.model,&state.preferences,slot,gesture)) {state.dirty=true;state.last_save=0;}
@@ -135,6 +137,9 @@ static void create_settings_content(void) {
     app_range_create(&range,parent,36,70,248,&score_font_16);
     info=label(parent,20,75,280,0xF2F3E9);lv_label_set_long_mode(info,LV_LABEL_LONG_WRAP);
     hint=label(parent,16,168,288,0xA6B5B7);status=label(parent,16,190,288,0xA6B5B7);
+    for(unsigned i=0;i<3;++i){group_rows[i]=label(parent,22,35+(int)i*41,276,0xF2F3E9);
+        lv_obj_set_height(group_rows[i],35);lv_obj_set_style_pad_top(group_rows[i],7,0);
+        lv_obj_set_style_radius(group_rows[i],6,0);lv_obj_set_style_bg_opa(group_rows[i],LV_OPA_COVER,0);}
     for(unsigned i=0;i<2;++i){direction_rows[i]=label(parent,22,65+(int)i*42,276,0xF2F3E9);
         lv_obj_set_height(direction_rows[i],34);lv_obj_set_style_pad_top(direction_rows[i],8,0);
         lv_obj_set_style_radius(direction_rows[i],6,0);lv_obj_set_style_bg_opa(direction_rows[i],LV_OPA_COVER,0);}
@@ -157,12 +162,22 @@ static void render(void *c,const app_module_view_t *v) {
         return;
     }
     if(network_mounted){lv_obj_clean(content);create_settings_content();network_mounted=false;}
+    for(unsigned i=0;i<3;++i)visible(group_rows[i],!m->submenu);
+    if(!m->submenu){
+        app_header_context(groups[m->group]);
+        visible(range.root,false);visible(name,false);visible(value,false);visible(info,false);visible(hint,false);visible(status,false);
+        for(unsigned i=0;i<2;++i)visible(direction_rows[i],false);
+        unsigned start=m->group>1?m->group-1:0;if(start>APP_SETTINGS_GROUP_COUNT-3)start=APP_SETTINGS_GROUP_COUNT-3;
+        for(unsigned i=0;i<3;++i){unsigned at=start+i;lv_label_set_text(group_rows[i],groups[at]);lv_obj_set_style_bg_color(group_rows[i],lv_color_hex(at==m->group?0x246B4E:0x1C303B),0);}
+        return;
+    }
+    visible(hint,true);visible(status,true);
     app_header_context(names[m->focus]);
     lv_obj_set_y(info,75);
     lv_obj_set_style_text_font(info,&score_font_16,0);
     lv_obj_set_style_text_font(status,&score_font_16,0);
     lv_obj_set_style_text_color(name,lv_color_hex(0xF2F3E9),0);
-    const bool is_range=(m->focus>=APP_SETTING_BRIGHTNESS && m->focus<=APP_SETTING_BLANK) || m->focus==APP_SETTING_VOLUME;
+    const bool is_range=(m->focus>=APP_SETTING_BRIGHTNESS && m->focus<=APP_SETTING_BLANK) || m->focus==APP_SETTING_VOLUME || m->focus==APP_SETTING_DOUBLE;
 
     visible(range.root,is_range);visible(name,m->focus==APP_SETTING_NETWORK);visible(value,m->focus==APP_SETTING_NETWORK);visible(info,m->focus==APP_SETTING_INFO || m->focus==APP_SETTING_NETWORK);
     for(unsigned i=0;i<2;++i){
@@ -172,13 +187,14 @@ static void render(void *c,const app_module_view_t *v) {
         lv_obj_set_style_bg_color(direction_rows[i],lv_color_hex(selected ? 0x246B4E : 0x1C303B),0);
     }
     if(is_range) {
-        char current[32];const bool brightness=m->focus==APP_SETTING_BRIGHTNESS,volume=m->focus==APP_SETTING_VOLUME;
+        char current[32];const bool brightness=m->focus==APP_SETTING_BRIGHTNESS,volume=m->focus==APP_SETTING_VOLUME,dbl=m->focus==APP_SETTING_DOUBLE;
         unsigned seconds=m->focus==APP_SETTING_DIM ? p->dim_seconds : p->blank_seconds;
-        if(brightness || volume)snprintf(current,sizeof(current),"%u%%",volume ? p->volume : p->brightness);
+        if(dbl)snprintf(current,sizeof(current),"%u ms",p->double_click_ms);
+        else if(brightness || volume)snprintf(current,sizeof(current),"%u%%",volume ? p->volume : p->brightness);
         else if(seconds)snprintf(current,sizeof(current),TXT_APP_SECONDS,seconds);
         else snprintf(current,sizeof(current),"%s",TXT_APP_UNLIMITED);
-        app_range_render(&range,app_settings_range_index(m,&state.preferences),volume ? 100/APP_VOLUME_STEP : brightness ? 8 : 4,current,
-            volume ? "0%" : brightness ? "20%" : m->focus==APP_SETTING_DIM ? "15 s" : "60 s",brightness || volume ? "100%" : TXT_APP_UNLIMITED,m->editing);
+        app_range_render(&range,app_settings_range_index(m,&state.preferences),dbl ? (APP_DOUBLE_MAX-APP_DOUBLE_MIN)/APP_DOUBLE_STEP : volume ? 100/APP_VOLUME_STEP : brightness ? 8 : 4,current,
+            dbl ? "200 ms" : volume ? "0%" : brightness ? "20%" : m->focus==APP_SETTING_DIM ? "15 s" : "60 s",dbl ? "450 ms" : brightness || volume ? "100%" : TXT_APP_UNLIMITED,m->editing);
     } else if(m->focus==APP_SETTING_DIRECTION) {}
     else if(m->focus==APP_SETTING_NETWORK){
         char ssid[100];net_setup_display_ssid(state.network.ssid,ssid,sizeof(ssid));
@@ -196,7 +212,7 @@ static void render(void *c,const app_module_view_t *v) {
         lv_obj_set_y(info,42);lv_obj_set_style_text_font(info,&score_font_14,0);
         lv_label_set_text_fmt(info,TXT_APP_VERSION "\n%s\n" TXT_APP_DEVICE "\n%s\nIP %s",state.version ? state.version : "--",bat,network_status(),*state.network.ip ? state.network.ip : "--");
     }
-    lv_label_set_text(hint,m->focus==APP_SETTING_INFO ? "" : m->editing ? TXT_APP_EDIT_HINT : TXT_APP_SETTING_HINT);
+    lv_label_set_text(hint,m->focus==APP_SETTING_DOUBLE ? TXT_SETTINGS_DOUBLE_HINT : m->focus==APP_SETTING_INFO ? "" : m->editing ? TXT_APP_EDIT_HINT : TXT_APP_SETTING_HINT);
     lv_obj_set_y(hint,v->content_height-38);lv_obj_set_y(status,v->content_height-18);
     lv_label_set_text(status,state.dirty || (state.storage && strcmp(state.storage,TXT_APP_PREF_SAVED)!=0) ? app_settings_storage_status() : "");
 }

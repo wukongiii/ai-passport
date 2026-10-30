@@ -1354,3 +1354,31 @@ phone game selector replaces both rule text and tools; unimplemented games show
 AI unavailable with no fallback to eight-ball. This selector only previews that
 game's configuration; actual voice requests still use the active game's snapshot,
 with its scores, players and revision. HTTP does not read live game state.
+
+
+### Settings hierarchy and double-click interval
+
+Device settings has five first-level groups in order: Display, Sound, Operation,
+About and Network. Display contains direction, brightness, automatic dimming and
+blanking; Sound contains speech volume; Operation contains double-click interval;
+About shows device information; Network retains connection and provisioning pages.
+Middle enters/edits/confirms. Holding middle cancels an edit, returns one level,
+or leaves settings from the group list. The phone portal uses separate Display,
+Sound, Operation and About blocks beside Network, games and AI configuration.
+Phone saves patch only their named settings section, retaining other sections.
+
+Double-click interval defaults to 350 ms (previously fixed at 180 ms), with
+200-450 ms choices in 50 ms steps. Both device and phone show a slider and exact
+value. A larger window accepts slower double clicks but also delays single-click
+confirmation. Long-press timing remains 500 ms. The BSP wraps the pinned button
+library's public short-press/repeat interval setter for all three keys. The owner
+task applies the saved interval after button initialization and confirmed changes;
+callbacks remain nonblocking. Editing alone does not change recognition timing.
+
+The existing 16-byte preferences record is now version 3; bytes 10-11 hold the
+little-endian interval. Versions 1 and 2 retain their display/volume values and
+supply the default interval. No Wi-Fi, AI or score records are rewritten. Finite
+host checks cover group navigation/back/cancel/commit, range limits, legacy
+records, isolated phone patches, and BSP parameter forwarding/invalid states.
+Real LVGL previews exercise both landscape directions; physical double-click
+comfort and saved timing after restart require device acceptance.

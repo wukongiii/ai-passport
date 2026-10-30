@@ -8,6 +8,7 @@ enum { APP_NET_FORM_MAX=2048, APP_NET_RETRY_LIMIT=3, APP_NET_PORTAL_SECONDS=300 
 typedef struct { char ssid[33],password[65]; } app_net_credentials_t;
 bool app_net_credentials_valid(const app_net_credentials_t *);
 bool app_net_parse_credentials(const char *form,app_net_credentials_t *out);
+bool app_net_patch_preferences(const char *form,const app_preferences_t *current,app_preferences_t *out);
 bool app_net_parse_preferences(const char *form,app_preferences_t *out);
 /* Strict form decoding, rejects truncation, duplicate keys and embedded NUL. */
 bool app_net_form_value(const char *form,const char *key,char *out,size_t capacity);

@@ -225,6 +225,16 @@ esp_err_t bsp_button_init(bsp_btn_cb_t cb, void *user) {
     return ESP_OK;
 }
 
+esp_err_t bsp_button_set_double_click_ms(unsigned ms) {
+    if(ms<200 || ms>450 || ms%50)return ESP_ERR_INVALID_ARG;
+    if(!s_ready)return ESP_ERR_INVALID_STATE;
+    for(unsigned i=0;i<BSP_BTN_COUNT;++i){
+        esp_err_t e=iot_button_set_param(s_btn[i],BUTTON_SHORT_PRESS_TIME_MS,(void *)(intptr_t)ms);
+        if(e!=ESP_OK)return e;
+    }
+    return ESP_OK;
+}
+
 int bsp_button_read_mv(void) {
     // 读的是 bsp_button_init() 建好、并与 iot_button 共用的那一路 ADC。
     // 单次采样与组件的按键轮询互不干扰(oneshot 内部自带锁)。

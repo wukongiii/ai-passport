@@ -190,3 +190,11 @@
 #define TXT_AI_ASSISTANT "助手设置"
 #define TXT_AI_ASSISTANT_HELP "手机修改昵称与提示词"
 #define TXT_AI_ASSISTANT_SCOPE "应用上下文 · 独立于模型"
+
+#define TXT_SETTINGS_DISPLAY "显示"
+#define TXT_SETTINGS_SOUND "声音"
+#define TXT_SETTINGS_OPERATION "操作"
+#define TXT_SETTINGS_ABOUT "关于"
+#define TXT_SETTINGS_NETWORK "网络"
+#define TXT_SETTINGS_DOUBLE "双击间隔"
+#define TXT_SETTINGS_DOUBLE_HINT "数值越大越易双击，单击稍晚响应"

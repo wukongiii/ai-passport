@@ -30,6 +30,10 @@ typedef void (*bsp_btn_cb_t)(bsp_btn_t btn, bsp_btn_ev_t ev, void *user);
 // ADC 校准失败时返回错误而不是把无效电压解码为按键，修正故障后可重试。
 esp_err_t bsp_button_init(bsp_btn_cb_t cb, void *user);
 
+// Set the repeat-click window for all three keys (200..450 ms, 50 ms steps).
+// Call from the application owner task after init, never from a button callback.
+esp_err_t bsp_button_set_double_click_ms(unsigned milliseconds);
+
 // deep sleep 专用:停掉三个按键设备、释放共享 ADC unit,再把按键脚交回普通数字输入
 // 并开启上拉(与板上 10k 外部上拉并联)。level 回填当时该脚电平,1 = 松开。
 //
