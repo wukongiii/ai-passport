@@ -6,6 +6,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <stdlib.h>
@@ -17,8 +18,30 @@ static void memory_stage(const char *stage){
  ESP_LOGI(TRANSPORT_TAG,"Memory %s: free=%u largest=%u",stage,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 }
 static bool stopped(const ai_transport_control_t *c){return c&&c->cancel&&c->cancel(c->context);}
-static bool write_all(esp_http_client_handle_t client,const char *data,size_t size,const ai_transport_control_t *control){
- while(size&&!stopped(control)){int n=esp_http_client_write(client,data,(int)size);if(n<=0)return false;data+=n;size-=(unsigned)n;}return !size&&!stopped(control);
+enum { UPLOAD_WRITE_BYTES=512, UPLOAD_STALL_US=10000000 };
+static esp_err_t write_all(esp_http_client_handle_t client,const char *data,size_t size,bool tls,const ai_transport_control_t *control){
+ int64_t progress=esp_timer_get_time();unsigned waits=0;
+ while(size){
+  if(stopped(control))return ESP_ERR_INVALID_STATE;
+  /* IDF's synchronous HTTP writer loses its accumulated byte count if a
+   * subsequent transport write times out. Keep each call within one TLS
+   * fragment (512 is the minimum negotiated fragment size). With the pinned
+   * TLS transport a zero return then means poll timeout before any write.
+   * Never retry negative/ambiguous failures or resubmit a model request. */
+  size_t chunk=size>UPLOAD_WRITE_BYTES?UPLOAD_WRITE_BYTES:size;
+  int n=esp_http_client_write(client,data,(int)chunk);
+  if(n<0){ESP_LOGW(TRANSPORT_TAG,"Upload write failed: result=%d",n);return ESP_FAIL;}
+  if(!n){
+   if(!tls)return ESP_FAIL; // Plain TCP send may have hidden partial progress.
+   ++waits;
+   if(esp_timer_get_time()-progress>=UPLOAD_STALL_US){ESP_LOGW(TRANSPORT_TAG,"Upload stalled: polls=%u",waits);return ESP_ERR_TIMEOUT;}
+   vTaskDelay(pdMS_TO_TICKS(10));continue;
+  }
+  if((size_t)n>chunk)return ESP_FAIL;
+  data+=n;size-=(unsigned)n;progress=esp_timer_get_time();
+ }
+ if(waits)ESP_LOGI(TRANSPORT_TAG,"Upload resumed: polls=%u",waits);
+ return stopped(control)?ESP_ERR_INVALID_STATE:ESP_OK;
 }
 static size_t base64(const uint8_t *in,size_t count,char *out){
  static const char alphabet[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";size_t used=0;
@@ -45,12 +68,13 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
  esp_http_client_config_t config={.url=url,.method=HTTP_METHOD_POST,.timeout_ms=5000,.crt_bundle_attach=esp_crt_bundle_attach,.buffer_size=1024,.buffer_size_tx=1024,.disable_auto_redirect=true};
  client=esp_http_client_init(&config);if(!client){error=ESP_ERR_NO_MEM;goto done;}
  snprintf(auth,sizeof(auth),"Bearer %s",key);error=esp_http_client_set_header(client,"Authorization",auth);if(error==ESP_OK)error=esp_http_client_set_header(client,"Content-Type","application/json");if(error!=ESP_OK)goto done;
+ bool tls=!strncmp(url,"https://",8);
  unsigned wav_size=record?44+samples*2:0;size_t total=head_size+4*((wav_size+2)/3)+tail_size;
  stage="TLS connect";memory_stage(stage);
  error=esp_http_client_open(client,(int)total);memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));if(error!=ESP_OK)goto done;
  esp_http_client_set_timeout_ms(client,1000);
  stage="upload";
- if(!write_all(client,head,head_size,control)){error=ESP_FAIL;goto done;}
+ error=write_all(client,head,head_size,tls,control);if(error!=ESP_OK)goto done;
  free(head);head=NULL; // Retain the small provider suffix until audio is uploaded.
  uint8_t wav[44],pcm[768];char encoded[1024];voice_wav_header(wav,samples);voice_adpcm_t decoder={0};unsigned position=0;
  while(position<wav_size&&!stopped(control)){
@@ -59,12 +83,12 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
    if(position<44)pcm[i]=wav[position];
    else{unsigned at=position-44;if(!(at&1)){unsigned sample=at/2;uint8_t n=(voice_buffer_byte(record,sample/2)>>(4*(sample&1)))&15;int16_t value=voice_capture_decode(&decoder,n);pcm[i]=(uint8_t)value;wav[0]=(uint8_t)((uint16_t)value>>8);}else pcm[i]=wav[0];}
   }
-  if(!write_all(client,encoded,base64(pcm,count,encoded),control)){error=ESP_FAIL;goto done;}
+  error=write_all(client,encoded,base64(pcm,count,encoded),tls,control);if(error!=ESP_OK)goto done;
   voice_buffer_discard(record,position>44?(position-44)/4:0);
  }
  voice_buffer_release(record);record=NULL;
  if(stopped(control)){error=ESP_ERR_INVALID_STATE;goto done;}
- if(tail_size&&!write_all(client,tail,tail_size,control)){error=ESP_FAIL;goto done;}
+ if(tail_size){error=write_all(client,tail,tail_size,tls,control);if(error!=ESP_OK)goto done;}
  free(head);head=NULL;free(tail);tail=NULL;
  stage="response headers";memory_stage(stage);
  int64_t headers;

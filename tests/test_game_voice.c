@@ -36,6 +36,8 @@ static unsigned reads,executes,closes,spoken,headers,read_attempts;
 static unsigned revision,names_revision=1;
 static int http_status=200;
 static int open_error,write_error,read_error;
+static unsigned write_waits,write_calls,write_wait_after;
+static bool partial_write,stall_write,cancel_wait;
 static esp_err_t audio_error;
 static bool silent,cancel_upload,cancel_during_read,lease_owned,send_early=true;
 static size_t sent,expected;
@@ -80,7 +82,7 @@ esp_err_t bsp_audio_read(void *data,size_t size){
  return ESP_OK;
 }
 int esp_crt_bundle_attach(void *p){(void)p;return 0;}
-esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->crt_bundle_attach&&c->disable_auto_redirect&&!strcmp(c->url,"https://example.com/v1/chat/completions"));headers=read_attempts=0;sent=0;first[0]=0;return (void *)2;}
+esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->crt_bundle_attach&&c->disable_auto_redirect&&!strcmp(c->url,"https://example.com/v1/chat/completions"));headers=read_attempts=write_calls=0;sent=0;first[0]=0;return (void *)2;}
 esp_err_t esp_http_client_set_header(void *c,const char *k,const char *v){assert(c&&k&&v);return ESP_OK;}
 esp_err_t esp_http_client_set_timeout_ms(void *c,int t){assert(c&&t==1000);return ESP_OK;}
 esp_err_t esp_http_client_open(void *c,int n){assert(c&&n>0);expected=(unsigned)n;tls_bytes=live_bytes;
@@ -88,7 +90,10 @@ esp_err_t esp_http_client_open(void *c,int n){assert(c&&n>0);expected=(unsigned)
  tls_audio_bytes=((reads*80+VOICE_BLOCK_BYTES-1)/VOICE_BLOCK_BYTES)*VOICE_BLOCK_BYTES;
  assert(tls_bytes<tls_audio_bytes+sizeof(voice_job_t)+2048 || fail_shrink);
  return open_error;}
-int esp_http_client_write(void *c,const char *p,int n){assert(c&&p&&n>0&&lease_owned);if(write_error)return -1;if(!sent)snprintf(first,sizeof(first),"%.*s",n<1023?n:1023,p);assert(sent+(size_t)n<sizeof(uploaded));memcpy(uploaded+sent,p,(size_t)n);sent+=(unsigned)n;uploaded[sent]=0;if(cancel_upload)app_game_voice_cancel();return n;}
+int esp_http_client_write(void *c,const char *p,int n){assert(c&&p&&n>0&&n<=512&&lease_owned);++write_calls;
+ if(write_error)return -1;
+ if(stall_write||(write_waits&&sent>=write_wait_after)){if(write_waits)--write_waits;now+=1000000;if(cancel_wait)app_game_voice_cancel();return 0;}
+ if(partial_write&&n>127)n=127;if(!sent)snprintf(first,sizeof(first),"%.*s",n<1023?n:1023,p);assert(sent+(size_t)n<sizeof(uploaded));memcpy(uploaded+sent,p,(size_t)n);sent+=(unsigned)n;uploaded[sent]=0;if(cancel_upload)app_game_voice_cancel();return n;}
 int64_t esp_http_client_fetch_headers(void *c){assert(c);assert(sent==expected);assert(live_bytes<tls_bytes);return ++headers<3?-ESP_ERR_HTTP_EAGAIN:(int64_t)strlen(response);}
 int esp_http_client_get_status_code(void *c){assert(c);return http_status;}
 int esp_http_client_read(void *c,char *p,int n){assert(c);if(read_error)return -1;if(++read_attempts==1)return -ESP_ERR_HTTP_EAGAIN;if(read_attempts>2)return 0;assert(n>(int)strlen(response));strcpy(p,response);return (int)strlen(response);}
@@ -149,6 +154,13 @@ int main(void){
  silent=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&!strcmp(view.text,TXT_GAME_VOICE_EMPTY));silent=false;
  cancel_during_read=true;begin_job();process_job();drain();assert(reads==1&&executes==1);cancel_during_read=false;
  cancel_upload=true;begin_job();process_job();drain();assert(executes==1);cancel_upload=false;
+ // Retry only zero-byte polls, maintaining exact Content-Length and PCM.
+ write_waits=3;partial_write=true;cancel_upload=true;begin_job();process_job();drain();assert(!write_waits);cancel_upload=false;
+ const char *saved_response=response;response="{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"你好\"}}]}";
+ write_waits=3;write_wait_after=4096;begin_job();process_job();drain();verify_audio(3200);assert(!write_waits);partial_write=false;write_wait_after=0;response=saved_response;--spoken;
+ unsigned completed_scores=executes;
+ stall_write=true;begin_job();process_job();drain();assert(view.error==ESP_ERR_TIMEOUT&&write_calls==10&&executes==completed_scores);stall_write=false;
+ stall_write=cancel_wait=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_IDLE&&write_calls==1);stall_write=cancel_wait=false;
  open_error=0x7002;begin_job();process_job();drain();assert(view.error==0x7002);open_error=0;
  write_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL);write_error=0;
  read_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL);read_error=0;

@@ -1196,3 +1196,35 @@ quality, middle-key stop latency and absence of watchdog warnings await acceptan
 `build/firmware/ce6881d7a267f344326ff507a14a809e233a350c9122817b077d26184eb9674c/`
 
 ELF SHA-256: `416499b76b441b37fd8b2f4bca87585131d00e8b89092de043ca564608087ca5`.
+
+
+### Upload backpressure handling
+
+A captured HTTPS failure returned -1 during upload after certificate validation:
+the TLS socket's one-second write-readiness poll timed out. The application
+previously treated a zero-byte poll as an immediate fatal write failure.
+Uploads now wait through zero-byte TLS polls, up to ten seconds without forward
+progress and always bounded by cancellation and the existing session deadline.
+Positive writes advance only by the returned byte count. Negative results remain
+fatal; no connection is reopened and no model request is resubmitted.
+
+Each HTTP write is capped at 512 bytes, within one minimum-size TLS fragment.
+This matters for pinned ESP-IDF 5.5.3: its synchronous HTTP write loop can discard
+an earlier partial count when a later transport call fails. For TLS, one fragment
+avoids that loop, so zero means the transport poll timed out before writing.
+Plain HTTP zero returns are not retried because TCP may hide partial progress.
+No SDK files or TLS certificate settings are changed. The one-second poll keeps
+cancellation responsive; retries yield and log only wait counts/results.
+
+Focused host fault injection covers zero polls before and during upload, partial
+positive writes, exact JSON/Content-Length/WAV bytes, ten-second stalls, cancellation
+while waiting and fatal write failures, with no leaked voice buffers or duplicate
+score changes. Actual slow-Wi-Fi recovery and physical cancellation remain device
+acceptance checks, separate from synthetic transport checks.
+
+Complete gate Build/Host tests PASS; focused ASan/UBSan PASS. Slow-network device
+acceptance remains pending.
+
+`build/firmware/9c17c5f3ef10674267bd54b230d24915e23e06abf6345993f0e7ad169591f0c2/`
+
+ELF SHA-256: `59d3e3857a9403de1fb985e94e60bf1f6d84582a0f51ecc6ed5439e7a336cd93`.
