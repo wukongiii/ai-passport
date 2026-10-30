@@ -1041,13 +1041,17 @@ configuration still match. This is a single clarification turn, not chat history
 
 The app-lifetime worker has a 12 KB stack. Capture takes an exclusive lease from
 local TTS, wakes the codec at 16 kHz/16-bit mono, averages pairs to 8 kHz and stores
-IMA ADPCM in at most 40000 bytes of temporary RAM. Recording ends on Send or after
+IMA ADPCM in temporary RAM grown in 2048-byte steps up to 40000 bytes. The
+recording is trimmed to its used size before upload; a failed optional shrink
+retains the original allocation safely. Recording ends on Send or after
 10 seconds; silence and clips below 250 ms are rejected. Upload sequentially decodes
 to ordinary 8 kHz/16-bit mono WAV, Base64-encodes 768-byte chunks, and sends the adapter's
 `input_audio` plus captured game context/tools. The provider never receives ADPCM.
 No recording is written to NVS or Flash. Heap allocations, HTTP errors, oversized
 responses and invalid tool results fail without changing scores. The text envelope
-uses a 6144-byte head and 4096-byte suffix; response limit remains 6144 bytes. The
+uses bounded 6144-byte head and 4096-byte suffix scratch, then trims both to
+the encoded lengths before TLS. Text-only requests allocate no suffix. The
+response limit remains 6144 bytes. The
 parser is released before TLS and recreated after HTTP cleanup; the recording is
 freed after upload. These are allocation budgets, not measured board memory peaks.
 
@@ -1091,3 +1095,29 @@ low-memory rejection, job allocation failure, cancellation cleanup and probe
 allocation failure. After the corrected firmware was flashed with NVS preserved,
 the user confirmed successful local playback with audible sound on 2026-10-30.
 Concurrent model/network operation and peak runtime heap remain unverified.
+
+## Voice upload allocation lifecycle
+
+Recording, request encoding, TLS upload, response reading and reply parsing have
+separate buffer lifetimes. After upload the recording and request suffix are
+freed before reading the response. Capability checks allocate their argument
+parser only while validating the returned tool, rather than retaining it during
+TLS. Stage logs report free heap and largest block at TLS connect, response
+headers and reply parsing; failures include the stage and numeric error. No Key,
+recording, request body or model reply is logged. The 10-second limit, audio
+format, certificate verification and score validation are unchanged.
+
+Finite host checks track all voice-owned allocations, check short and full clips
+against the decoded WAV byte stream, and require zero retained allocations after
+success, cancellation and failure. Optional shrinking and recording growth have
+failure injection. These allocation figures exclude actual codec/radio/TLS and
+must not be presented as measured device peaks.
+
+Validation on 2026-10-30: complete Build and Host tests PASS; focused ASan/UBSan
+and bounded LVGL preview PASS. A deterministic 0.4-second clip uses 1600 bytes
+of encoded audio and 6253 bytes of tracked application allocations at TLS start
+(on the host); the 10-second fixture uses 40000 and 44653 bytes respectively.
+The verified archive is `build/firmware/bda1cd866926d85813d4cda4063bba2830695b661c0dc5758e9521a60ec9bc3c/`;
+matching ELF SHA-256 is `5517950bb7d96a08c0751b27297793b3d261bd6b00fc7da8814b237b80a79c5e`.
+Partition comparison and segmented flash hash verification passed, preserving
+NVS. Real TLS memory peaks and on-device voice scoring await acceptance.
