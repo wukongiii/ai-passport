@@ -48,7 +48,7 @@ static void publish(game_voice_state_t state,int error,const char *text){
 }
 static void process_job(void){
   portENTER_CRITICAL(&lock);bool have=queued;queued=false;portEXIT_CRITICAL(&lock);if(!have)return;
-  esp_err_t error=ESP_OK;uint8_t *record=NULL;size_t capacity=0;bool lease=false,audible=false;voice_adpcm_t capture={0};
+  esp_err_t error=ESP_OK;voice_buffer_t record={0};bool lease=false,audible=false;voice_adpcm_t capture={0};
   // Network time is synchronized in the network service, before verified TLS.
   int64_t clock_deadline=esp_timer_get_time()+5000000;
   while(!stop() && time(NULL)<1700000000 && esp_timer_get_time()<clock_deadline)vTaskDelay(pdMS_TO_TICKS(100));
@@ -62,29 +62,25 @@ static void process_job(void){
   int64_t record_deadline=esp_timer_get_time()+VOICE_SECONDS*1000000LL;
   for(unsigned blocks=0;blocks<VOICE_SECONDS*50&&!stop()&&esp_timer_get_time()<record_deadline;++blocks){
    portENTER_CRITICAL(&lock);bool send=send_requested;portEXIT_CRITICAL(&lock);if(send)break;
-   /* Grow in small steps; short commands never reserve the full 10-second clip.
-    * A failed growth keeps the old pointer for the single cleanup path. */
-   size_t needed=(capture.samples+160+1)/2;
-   if(needed>capacity){
-    size_t next=capacity+2048;if(next>VOICE_CAPACITY)next=VOICE_CAPACITY;
-    uint8_t *grown=realloc(record,next);
-    if(!grown){error=ESP_ERR_NO_MEM;ESP_LOGW(TAG,"Recording growth failed: need=%u free=%u largest=%u",(unsigned)next,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));break;}
-    record=grown;capacity=next;
-   }
    int16_t pcm[320];error=bsp_audio_read(pcm,sizeof(pcm));if(error!=ESP_OK)break;
-   audible|=voice_capture_audible(pcm,320);voice_capture_encode(&capture,record,pcm,320);
+   uint8_t encoded[80];voice_adpcm_t block=capture;block.samples=0;
+   audible|=voice_capture_audible(pcm,320);voice_capture_encode(&block,encoded,pcm,320);
+   if(!voice_buffer_append(&record,encoded,(block.samples+1)/2)){
+    error=ESP_ERR_NO_MEM;ESP_LOGW(TAG,"Recording block failed: bytes=%u free=%u largest=%u",(unsigned)record.size,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));break;
+   }
+   capture.predictor=block.predictor;capture.index=block.index;capture.samples+=block.samples;
    portENTER_CRITICAL(&lock);view.milliseconds=capture.samples*1000/VOICE_RATE;++view.revision;portEXIT_CRITICAL(&lock);
   }
 finish:
-  if(lease){esp_err_t slept=bsp_audio_sleep();if(error==ESP_OK)error=slept;app_speech_capture_release();}
+  if(lease){esp_err_t slept=bsp_audio_release();if(error==ESP_OK)error=slept;}
   if(error==ESP_OK&&!stop()){
    if(!audible||capture.samples<VOICE_RATE/4){error=ESP_ERR_INVALID_ARG;publish(GAME_VOICE_ERROR,error,TXT_GAME_VOICE_EMPTY);}
    else{
-    size_t used=(capture.samples+1)/2;uint8_t *trimmed=realloc(record,used);if(trimmed){record=trimmed;capacity=used;}
-    ESP_LOGI(TAG,"Upload recording: bytes=%u capacity=%u free=%u largest=%u",(unsigned)used,(unsigned)capacity,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={transport_stop,NULL};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",record,capture.samples,&job->reply,&control);record=NULL;}
+    ESP_LOGI(TAG,"Upload recording: bytes=%u free=%u largest=%u",(unsigned)record.size,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={transport_stop,NULL};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",&record,capture.samples,&job->reply,&control);}
   }
-  free(record);
+  voice_buffer_release(&record);if(lease)app_speech_capture_release();
+  ESP_LOGI(TAG,"Job finished: error=%d free=%u largest=%u",error,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
   portENTER_CRITICAL(&lock);completed=true;view.error=error;portEXIT_CRITICAL(&lock);
 }
 static void run(void *arg){(void)arg;for(;;){

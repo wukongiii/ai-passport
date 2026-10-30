@@ -1041,9 +1041,8 @@ configuration still match. This is a single clarification turn, not chat history
 
 The app-lifetime worker has a 12 KB stack. Capture takes an exclusive lease from
 local TTS, wakes the codec at 16 kHz/16-bit mono, averages pairs to 8 kHz and stores
-IMA ADPCM in temporary RAM grown in 2048-byte steps up to 40000 bytes. The
-recording is trimmed to its used size before upload; a failed optional shrink
-retains the original allocation safely. Recording ends on Send or after
+IMA ADPCM in independent 2048-byte RAM blocks, bounded to 40000 used bytes
+(40960 allocated bytes); no contiguous recording allocation is grown or moved. Recording ends on Send or after
 10 seconds; silence and clips below 250 ms are rejected. Upload sequentially decodes
 to ordinary 8 kHz/16-bit mono WAV, Base64-encodes 768-byte chunks, and sends the adapter's
 `input_audio` plus captured game context/tools. The provider never receives ADPCM.
@@ -1109,7 +1108,7 @@ format, certificate verification and score validation are unchanged.
 
 Finite host checks track all voice-owned allocations, check short and full clips
 against the decoded WAV byte stream, and require zero retained allocations after
-success, cancellation and failure. Optional shrinking and recording growth have
+success, cancellation and failure. Envelope shrinking and recording-block allocation have
 failure injection. These allocation figures exclude actual codec/radio/TLS and
 must not be presented as measured device peaks.
 
@@ -1121,3 +1120,38 @@ The verified archive is `build/firmware/bda1cd866926d85813d4cda4063bba2830695b66
 matching ELF SHA-256 is `5517950bb7d96a08c0751b27297793b3d261bd6b00fc7da8814b237b80a79c5e`.
 Partition comparison and segmented flash hash verification passed, preserving
 NVS. Real TLS memory peaks and on-device voice scoring await acceptance.
+
+
+### Fragmented recording and audio/network ownership
+
+Device reproduction on 2026-10-30 located error 257 in the previous contiguous
+recording growth: a 32768-byte request failed with 41412 bytes free but a largest
+block of 30720 bytes. Two attempts produced the same values. A shorter clip
+(11200 ADPCM bytes) completed verified HTTPS and reply parsing, and the user
+confirmed a successful result. Error 28674 means HTTP connection failure; generic
+-1 needs its transport stage and is not by itself evidence of exhaustion.
+
+Recording now appends independent 2048-byte blocks, avoiding realloc relocation
+and its temporary duplicate allocation. The transport frees consumed blocks after
+successful writes; the maximum ten-second clip remains 40000 used bytes. The
+capture lease spans recording, audio resource release and the entire model
+request, preventing local TTS from overlapping TLS. Worker-only
+`bsp_audio_release()` first verifies codec suspend, then releases private codec,
+I2S and DMA allocations while preserving the shared I2C bus and remembered
+volume. The next recording or TTS operation recreates audio through init/format;
+light sleep retains its existing channel-preserving behavior. Suspend or channel
+release failure is reported rather than treated as successful release.
+
+Finite host tests enforce allocations below the reproduced 30720-byte block
+limit, verify the complete WAV stream across block boundaries, exercise partial
+block allocation and HTTP open/write/read failures, and check zero retained
+voice allocations. Short/full host TLS-start application allocations are
+6701/45613 bytes (including block rounding, excluding actual TLS/audio/radio).
+BSP checks cover release, idempotence and reinitialization with preserved volume.
+New cleanup/job diagnostics report heap recovery without logging payloads.
+On-device long clips, successive requests, restored playback and TLS headroom
+still require acceptance of this revision.
+
+Complete gate Build/Host tests PASS, focused ASan/UBSan PASS. Verified image
+SHA-256: `39e0d6c34dbd956b5b6c1893a9d397da7c7146238fbe4af78da19986c975002e`;
+matching ELF: `ec3265ba2a9e099c2f2ef2cec6201388d2f4af2d69085b891fcec0c48f7d5e1d`.

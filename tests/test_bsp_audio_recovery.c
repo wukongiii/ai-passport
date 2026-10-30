@@ -293,6 +293,15 @@ int main(void) {
     assert(tx_channel.hz == 8000 && registers[0x32] == 43);
     assert_active();
 
+    assert(bsp_audio_release() == ESP_OK);
+    assert(!s_initialized && !s_tx && !s_rx && !s_ctrl && !s_data && !s_gpio);
+    assert(s_volume == 43);
+    assert(bsp_audio_release() == ESP_OK);
+    assert(bsp_audio_init() == ESP_OK);
+    assert(bsp_audio_set_format(16000, 16, 1) == ESP_OK);
+    assert_active();
+    assert(registers[0x32] == 43);
+
     fresh();
     unsigned starts = codec_starts;
     assert(bsp_audio_sleep() == ESP_OK); // Never opened: no silent open/start.

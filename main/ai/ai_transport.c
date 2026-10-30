@@ -25,11 +25,11 @@ static size_t base64(const uint8_t *in,size_t count,char *out){
  for(size_t i=0;i<count;i+=3){unsigned n=(unsigned)in[i]<<16;if(i+1<count)n|=(unsigned)in[i+1]<<8;if(i+2<count)n|=in[i+2];
  out[used++]=alphabet[(n>>18)&63];out[used++]=alphabet[(n>>12)&63];out[used++]=i+1<count?alphabet[(n>>6)&63]:'=';out[used++]=i+2<count?alphabet[n&63]:'=';}return used;
 }
-esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,const char *input,uint8_t *record,unsigned samples,ai_reply_t *decoded,const ai_transport_control_t *control){
+esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,const char *input,voice_buffer_t *record,unsigned samples,ai_reply_t *decoded,const ai_transport_control_t *control){
  esp_err_t error=ESP_FAIL;char key[AI_KEY_CAPACITY]={0},model[AI_MODEL_CAPACITY]={0},auth[AI_KEY_CAPACITY+8]={0},url[AI_URL_CAPACITY]={0};
- if(stopped(control)){free(record);return ESP_ERR_INVALID_STATE;}
- if(!ai_config_connection(selected,key,model,url,NULL)){free(record);return ESP_ERR_INVALID_STATE;}
- if(stopped(control)){memset(key,0,sizeof(key));free(record);return ESP_ERR_INVALID_STATE;}
+ if(stopped(control)){voice_buffer_release(record);return ESP_ERR_INVALID_STATE;}
+ if(!ai_config_connection(selected,key,model,url,NULL)){voice_buffer_release(record);return ESP_ERR_INVALID_STATE;}
+ if(stopped(control)){memset(key,0,sizeof(key));voice_buffer_release(record);return ESP_ERR_INVALID_STATE;}
  const ai_model_adapter_t *adapter=ai_model_adapter(ai_provider(selected)->id);
  const char *stage="request buffers";
  ai_json_t *json=malloc(sizeof(*json));char *head=malloc(AI_BODY_CAPACITY),*tail=record?malloc(4096):NULL,*response=NULL;
@@ -57,11 +57,12 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
   size_t count=wav_size-position;if(count>sizeof(pcm))count=sizeof(pcm);
   for(size_t i=0;i<count;++i,++position){
    if(position<44)pcm[i]=wav[position];
-   else{unsigned at=position-44;if(!(at&1)){unsigned sample=at/2;uint8_t n=(record[sample/2]>>(4*(sample&1)))&15;int16_t value=voice_capture_decode(&decoder,n);pcm[i]=(uint8_t)value;wav[0]=(uint8_t)((uint16_t)value>>8);}else pcm[i]=wav[0];}
+   else{unsigned at=position-44;if(!(at&1)){unsigned sample=at/2;uint8_t n=(voice_buffer_byte(record,sample/2)>>(4*(sample&1)))&15;int16_t value=voice_capture_decode(&decoder,n);pcm[i]=(uint8_t)value;wav[0]=(uint8_t)((uint16_t)value>>8);}else pcm[i]=wav[0];}
   }
   if(!write_all(client,encoded,base64(pcm,count,encoded),control)){error=ESP_FAIL;goto done;}
+  voice_buffer_discard(record,position>44?(position-44)/4:0);
  }
- free(record);record=NULL;
+ voice_buffer_release(record);record=NULL;
  if(stopped(control)){error=ESP_ERR_INVALID_STATE;goto done;}
  if(tail_size&&!write_all(client,tail,tail_size,control)){error=ESP_FAIL;goto done;}
  free(head);head=NULL;free(tail);tail=NULL;
@@ -86,5 +87,5 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
 done:
  if(error!=ESP_OK)ESP_LOGW(TRANSPORT_TAG,"Request failed: stage=%s error=%d free=%u largest=%u",stage,error,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
  if(client)esp_http_client_cleanup(client);
- memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));free(json);free(head);free(tail);free(response);free(record);return error;
+ memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));free(json);free(head);free(tail);free(response);voice_buffer_release(record);memory_stage("request cleanup");return error;
 }

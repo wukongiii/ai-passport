@@ -5,17 +5,17 @@
 #include <string.h>
 #include <math.h>
 static int fail_alloc;
-static unsigned fail_grow,fail_shrink,grows;
+static unsigned fail_shrink;
 static size_t live_bytes,peak_bytes,tls_bytes,tls_audio_bytes;
 typedef struct {void *ptr;size_t size;} allocation_t;
 static allocation_t allocations[64];
 static int allocation_slot(void *p){for(unsigned i=0;i<64;++i)if(allocations[i].ptr==p)return (int)i;assert(!"untracked allocation");return -1;}
 static void account(void *p,size_t size){if(!p)return;int i=allocation_slot(NULL);allocations[i]=(allocation_t){p,size};live_bytes+=size;if(live_bytes>peak_bytes)peak_bytes=live_bytes;}
-static void *voice_malloc(size_t n){if(fail_alloc && !--fail_alloc)return NULL;void *p=malloc(n);account(p,n);return p;}
+static void *voice_malloc(size_t n){assert(n<=30720);if(fail_alloc && !--fail_alloc)return NULL;void *p=malloc(n);account(p,n);return p;}
 static void voice_free(void *p){if(!p)return;int i=allocation_slot(p);live_bytes-=allocations[i].size;allocations[i]=(allocation_t){0};free(p);}
 static void *voice_realloc(void *p,size_t n){
  int slot=p?allocation_slot(p):-1;size_t old=p?allocations[slot].size:0;
- if(n>old){++grows;if(fail_grow && grows==fail_grow)return NULL;}else if(fail_shrink)return NULL;
+ if(n<=old&&fail_shrink)return NULL;
  void *next=realloc(p,n);if(!next)return NULL;
  if(slot>=0){live_bytes-=old;allocations[slot]=(allocation_t){0};}account(next,n);return next;
 }
@@ -35,6 +35,7 @@ static app_network_snapshot_t net={.state=APP_NET_CONNECTED};
 static unsigned reads,executes,closes,spoken,headers,read_attempts;
 static unsigned revision,names_revision=1;
 static int http_status=200;
+static int open_error,write_error,read_error;
 static esp_err_t audio_error;
 static bool silent,cancel_upload,cancel_during_read,lease_owned,send_early=true;
 static size_t sent,expected;
@@ -66,6 +67,7 @@ esp_err_t bsp_audio_init(void){return audio_error;}
 esp_err_t bsp_audio_wake(void){return ESP_OK;}
 esp_err_t bsp_audio_set_format(uint32_t hz,uint8_t bits,uint8_t ch){assert(hz==16000&&bits==16&&ch==1);return ESP_OK;}
 esp_err_t bsp_audio_sleep(void){return ESP_OK;}
+esp_err_t bsp_audio_release(void){assert(lease_owned);return ESP_OK;}
 esp_err_t bsp_audio_read(void *data,size_t size){
  assert(lease_owned&&size==640);++reads;int16_t *pcm=data;
  for(unsigned i=0;i<320;++i)pcm[i]=silent?0:(int16_t)(5000*sin((reads*320+i)*0.12));
@@ -79,16 +81,14 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c)
 esp_err_t esp_http_client_set_header(void *c,const char *k,const char *v){assert(c&&k&&v);return ESP_OK;}
 esp_err_t esp_http_client_set_timeout_ms(void *c,int t){assert(c&&t==1000);return ESP_OK;}
 esp_err_t esp_http_client_open(void *c,int n){assert(c&&n>0);expected=(unsigned)n;tls_bytes=live_bytes;
- /* At TLS start the recording is trimmed to the actual encoded clip and no
-  * request parser or maximum-sized JSON envelope remains allocated. */
- tls_audio_bytes=reads*80;
- bool clip=false;for(unsigned i=0;i<64;++i)if(allocations[i].size==tls_audio_bytes)clip=true;
- assert(clip || fail_shrink);assert(fail_shrink || tls_bytes<tls_audio_bytes+sizeof(voice_job_t)+2048);
- return ESP_OK;}
-int esp_http_client_write(void *c,const char *p,int n){assert(c&&p&&n>0);if(!sent)snprintf(first,sizeof(first),"%.*s",n<1023?n:1023,p);assert(sent+(size_t)n<sizeof(uploaded));memcpy(uploaded+sent,p,(size_t)n);sent+=(unsigned)n;uploaded[sent]=0;if(cancel_upload)app_game_voice_cancel();return n;}
-int64_t esp_http_client_fetch_headers(void *c){assert(c);assert(sent==expected);return ++headers<3?-ESP_ERR_HTTP_EAGAIN:(int64_t)strlen(response);}
+ /* Blocks remain small and independently allocated, even at ten seconds. */
+ tls_audio_bytes=((reads*80+VOICE_BLOCK_BYTES-1)/VOICE_BLOCK_BYTES)*VOICE_BLOCK_BYTES;
+ assert(tls_bytes<tls_audio_bytes+sizeof(voice_job_t)+2048 || fail_shrink);
+ return open_error;}
+int esp_http_client_write(void *c,const char *p,int n){assert(c&&p&&n>0&&lease_owned);if(write_error)return -1;if(!sent)snprintf(first,sizeof(first),"%.*s",n<1023?n:1023,p);assert(sent+(size_t)n<sizeof(uploaded));memcpy(uploaded+sent,p,(size_t)n);sent+=(unsigned)n;uploaded[sent]=0;if(cancel_upload)app_game_voice_cancel();return n;}
+int64_t esp_http_client_fetch_headers(void *c){assert(c);assert(sent==expected);assert(live_bytes<tls_bytes);return ++headers<3?-ESP_ERR_HTTP_EAGAIN:(int64_t)strlen(response);}
 int esp_http_client_get_status_code(void *c){assert(c);return http_status;}
-int esp_http_client_read(void *c,char *p,int n){assert(c);if(++read_attempts==1)return -ESP_ERR_HTTP_EAGAIN;if(read_attempts>2)return 0;assert(n>(int)strlen(response));strcpy(p,response);return (int)strlen(response);}
+int esp_http_client_read(void *c,char *p,int n){assert(c);if(read_error)return -1;if(++read_attempts==1)return -ESP_ERR_HTTP_EAGAIN;if(read_attempts>2)return 0;assert(n>(int)strlen(response));strcpy(p,response);return (int)strlen(response);}
 bool esp_http_client_is_complete_data_received(void *c){assert(c);return true;}
 esp_err_t esp_http_client_cleanup(void *c){assert(c);++closes;return ESP_OK;}
 static void begin_job(void){reads=0;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(view.state==GAME_VOICE_STARTING&&occupied);}
@@ -122,7 +122,7 @@ int main(void){
  cfg.configured[0]=false;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(view.state==GAME_VOICE_ERROR&&!occupied);cfg.configured[0]=true;
  net.state=APP_NET_OFFLINE;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE)&&!occupied);net.state=APP_NET_CONNECTED;
  begin_job();b.actions[APP_GESTURE_LONG][1]=(app_action_hint_t){"hall",true,1,APP_ACTION_BACK};app_game_voice_bindings(target,&b);assert(b.actions[APP_GESTURE_LONG][1].id==64002);process_job();assert(completed&&occupied);unsigned seq=session.sequence;
- assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE)&&session.sequence==seq);drain();verify_audio(3200);printf("Short clip: audio=%zu TLS application allocations=%zu\n",tls_audio_bytes,tls_bytes);assert(tls_audio_bytes==1600&&tls_bytes<10000);assert(executes==1&&spoken==1&&headers==3&&read_attempts==3&&strstr(first,"input_audio"));
+ assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE)&&session.sequence==seq);drain();verify_audio(3200);printf("Short clip: audio=%zu TLS application allocations=%zu\n",tls_audio_bytes,tls_bytes);assert(tls_audio_bytes==2048&&tls_bytes<10000);assert(executes==1&&spoken==1&&headers==3&&read_attempts==3&&strstr(first,"input_audio"));
  cfg.active=2;cfg.configured[2]=true;begin_job();assert(provider==2);cancel_upload=true;process_job();drain();cancel_upload=false;cfg.active=0;
  // A manual score cancels even an already completed reply, before owner consumption.
  begin_job();process_job();assert(!app_game_voice_input(target,0,APP_GESTURE_SHORT));drain();assert(executes==1);
@@ -133,12 +133,16 @@ int main(void){
  begin_job();process_job();now=session.deadline;drain();assert(executes==1);
  fail_alloc=1;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(!occupied&&!job&&!session.pending&&view.error==ESP_ERR_NO_MEM);
  for(int allocation=2;allocation<=6;++allocation){fail_alloc=allocation;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR);}fail_alloc=0;
- grows=0;fail_grow=2;begin_job();send_early=false;process_job();drain();assert(view.error==ESP_ERR_NO_MEM);fail_grow=0;send_early=true;
+ // Failure on a later recording block releases every earlier block.
+ fail_alloc=4;begin_job();send_early=false;process_job();drain();assert(view.error==ESP_ERR_NO_MEM);fail_alloc=0;send_early=true;
  fail_shrink=1;cancel_upload=true;begin_job();process_job();drain();cancel_upload=false;fail_shrink=0; // shrinking is optional, cleanup still required
  audio_error=ESP_FAIL;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR);audio_error=ESP_OK;
  silent=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&!strcmp(view.text,TXT_GAME_VOICE_EMPTY));silent=false;
  cancel_during_read=true;begin_job();process_job();drain();assert(reads==1&&executes==1);cancel_during_read=false;
  cancel_upload=true;begin_job();process_job();drain();assert(executes==1);cancel_upload=false;
+ open_error=0x7002;begin_job();process_job();drain();assert(view.error==0x7002);open_error=0;
+ write_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL);write_error=0;
+ read_error=1;begin_job();process_job();drain();assert(view.error==ESP_FAIL);read_error=0;
  http_status=401;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&view.error==401);http_status=200;
  response="{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"你好\"}}]}";
  send_early=false;begin_job();process_job();assert(reads==500&&view.milliseconds==10000);verify_audio(80000);printf("Full clip: audio=%zu TLS application allocations=%zu\n",tls_audio_bytes,tls_bytes);drain();assert(executes==1&&view.state==GAME_VOICE_REPLY&&spoken==2);

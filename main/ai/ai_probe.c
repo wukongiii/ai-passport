@@ -56,9 +56,9 @@ void ai_probe_run(unsigned provider,unsigned generation){
  ai_check_publish(provider,generation,AI_CHECK_AUDIO,0);
  game->instructions="Isolated audio capability test. Listen to the audio. Call probe_voice once, setting player to left or right according to the spoken player. No gameplay is executed. Do not answer in prose.";
  strcpy(game->tools,"[{\"name\":\"probe_voice\",\"description\":\"Report which player is named in the audio. No score change.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"player\":{\"type\":\"string\",\"enum\":[\"left\",\"right\"]}},\"required\":[\"player\"],\"additionalProperties\":false}}]");
- uint8_t *audio=malloc((AI_PROBE_SAMPLES+1)/2);if(!audio){error=ESP_ERR_NO_MEM;goto failed;}
- memcpy(audio,probe_audio,(AI_PROBE_SAMPLES+1)/2);
- error=ai_transport_request(provider,game,"Determine the player from the attached speech and report it with probe_voice.",audio,AI_PROBE_SAMPLES,reply,&c);
+ voice_buffer_t audio={0};
+ if(!voice_buffer_append(&audio,probe_audio,(AI_PROBE_SAMPLES+1)/2)){voice_buffer_release(&audio);error=ESP_ERR_NO_MEM;goto failed;}
+ error=ai_transport_request(provider,game,"Determine the player from the attached speech and report it with probe_voice.",&audio,AI_PROBE_SAMPLES,reply,&c);
  if(cancelled(NULL)&&!error)error=ESP_ERR_INVALID_STATE;
  if(error)goto failed;
  expected=expected_tool(workspace,true);if(expected!=1){error=expected<0?ESP_ERR_NO_MEM:ESP_ERR_INVALID_RESPONSE;goto failed;}

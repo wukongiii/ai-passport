@@ -506,6 +506,15 @@ esp_err_t bsp_audio_sleep(void) {
     return first_error;
 }
 
+esp_err_t bsp_audio_release(void) {
+    esp_err_t error = bsp_audio_sleep();
+    if (error != ESP_OK) return error;
+    uint8_t volume = s_volume;
+    audio_cleanup();
+    s_volume = volume;
+    return s_tx || s_rx || s_codec_release_failed ? ESP_ERR_INVALID_STATE : ESP_OK;
+}
+
 esp_err_t bsp_audio_prepare_deep_sleep(void) {
     esp_err_t first_error = audio_disable_i2s_channels();
     const int pins[] = {
