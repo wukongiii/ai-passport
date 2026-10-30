@@ -1,5 +1,6 @@
 #include "ai_transport.h"
 #include "ai_config.h"
+#include "ai_response_filter.h"
 #include "ai_provider.h"
 #include "voice_capture.h"
 #include "esp_crt_bundle.h"
@@ -96,14 +97,17 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
  if(headers<0||stopped(control)){error=ESP_FAIL;goto done;}
  int status=esp_http_client_get_status_code(client);if(status!=200){error=status;goto done;}
  stage="response buffer";response=malloc(AI_RESPONSE_CAPACITY+1);if(!response){error=ESP_ERR_NO_MEM;goto done;}
- size_t used=0;
+ ai_response_filter_t filter;ai_response_filter_init(&filter,response,AI_RESPONSE_CAPACITY+1,adapter->discard_response_string);
  while(!stopped(control)){
-  int n=esp_http_client_read(client,response+used,AI_RESPONSE_CAPACITY-used);
+  char chunk[512];int n=esp_http_client_read(client,chunk,sizeof(chunk));
   if(n==-ESP_ERR_HTTP_EAGAIN)continue;
   if(n<0){error=ESP_FAIL;goto done;}
   if(!n){if(esp_http_client_is_complete_data_received(client))break;vTaskDelay(pdMS_TO_TICKS(10));continue;}
-  used+=(unsigned)n;if(used==AI_RESPONSE_CAPACITY){error=ESP_ERR_INVALID_SIZE;goto done;}
+  if(!ai_response_filter_feed(&filter,chunk,(unsigned)n)){ESP_LOGW(TRANSPORT_TAG,"Response rejected: wire=%u retained=%u",(unsigned)filter.wire,(unsigned)filter.used);error=ESP_ERR_INVALID_SIZE;goto done;}
  }
+ if(!ai_response_filter_finish(&filter)){error=ESP_ERR_INVALID_RESPONSE;goto done;}
+ ESP_LOGI(TRANSPORT_TAG,"Response envelope: wire=%u retained=%u",(unsigned)filter.wire,(unsigned)filter.used);
+ size_t used=filter.used;
  esp_http_client_cleanup(client);client=NULL;
  stage="response parser";memory_stage(stage);
  json=malloc(sizeof(*json));if(!json){error=ESP_ERR_NO_MEM;goto done;}

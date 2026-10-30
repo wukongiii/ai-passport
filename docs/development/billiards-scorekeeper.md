@@ -1228,3 +1228,32 @@ acceptance remains pending.
 `build/firmware/9c17c5f3ef10674267bd54b230d24915e23e06abf6345993f0e7ad169591f0c2/`
 
 ELF SHA-256: `59d3e3857a9403de1fb985e94e60bf1f6d84582a0f51ecc6ed5439e7a336cd93`.
+
+
+### Bounded auxiliary reasoning responses
+
+The gameplay response reader consumes 512-byte chunks and lets the adapter
+select an auxiliary string field to discard (`reasoning_content` for the
+compatible adapter). It replaces those string values with empty strings as
+bytes arrive, retaining at most 6144 bytes for the authoritative JSON parser.
+The complete wire envelope is separately limited to 65536 bytes; no 64 KB
+buffer is allocated. Other fields, tool arguments and duplicate keys remain
+visible to validation. Discarded strings still undergo escape, UTF-8 and
+surrogate validation. No command executes before the entire reply is received,
+parsed and validated. Exceeding either bound fails without changing scores.
+
+This reduces retained RAM, not model generation time or transmitted bytes, and
+does not disable model reasoning. Other auxiliary formats are not silently
+removed. Diagnostics report only wire/retained byte counts, never model text.
+Finite host cases cover fragmented long reasoning, normal content and tool
+arguments, malformed strings, duplicate keys, exact output capacity, pass-through
+mode and wire limits, including the actual gameplay worker/HTTP boundary.
+
+Complete gate Build/Host tests PASS; focused filter and actual-worker ASan/UBSan
+PASS. The verified image is
+`build/firmware/05667e72497625b4bf2912011c7ecaf63183d857e8078a97d76476af48891e7e/`;
+matching ELF SHA-256 is
+`81c46ab6ed9ff36b7a20a531e40e73b0ec30693ce7d6c02c081ad571c14dadff`.
+A captured pre-fix error 260 occurred at response-buffer capacity. Whether its
+oversized field was reasoning was not established because payloads are not
+logged. Real-model acceptance of this revision remains pending.

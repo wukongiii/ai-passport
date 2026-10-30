@@ -2,6 +2,7 @@ idf_component_register(
     SRCS "main.c"
          "ai/app_game_voice.c"
          "ai/ai_transport.c"
+         "ai/ai_response_filter.c"
          "ai/ai_probe.c"
          "ai/voice_capture.c"
          "ai/ai_json.c"

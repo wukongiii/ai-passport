@@ -75,4 +75,4 @@ static bool audio_common(ai_json_t *workspace,const ai_model_request_t *r,char *
     ai_json_write(&h,"{\"role\":\"user\",\"content\":[{\"type\":\"input_audio\",\"input_audio\":{\"data\":\"");return h.ok;
 }
 static bool audio_parts(ai_json_t *w,const ai_model_request_t *r,char *h,size_t hn,char *t,size_t tn){return audio_common(w,r,h,hn,t,tn);}
-const ai_model_adapter_t ai_compatible_adapter={"compatible",encode,audio_parts,decode};
+const ai_model_adapter_t ai_compatible_adapter={"compatible",encode,audio_parts,decode,"reasoning_content"};

@@ -40,7 +40,7 @@ static unsigned write_waits,write_calls,write_wait_after;
 static bool partial_write,stall_write,cancel_wait;
 static esp_err_t audio_error;
 static bool silent,cancel_upload,cancel_during_read,lease_owned,send_early=true;
-static size_t sent,expected;
+static size_t sent,expected,response_offset;
 static char first[1024];
 static char uploaded[240000];
 static const char *response="{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"adjust_score\",\"arguments\":\"{}\"}}]}}]}";
@@ -82,7 +82,7 @@ esp_err_t bsp_audio_read(void *data,size_t size){
  return ESP_OK;
 }
 int esp_crt_bundle_attach(void *p){(void)p;return 0;}
-esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->crt_bundle_attach&&c->disable_auto_redirect&&!strcmp(c->url,"https://example.com/v1/chat/completions"));headers=read_attempts=write_calls=0;sent=0;first[0]=0;return (void *)2;}
+esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->crt_bundle_attach&&c->disable_auto_redirect&&!strcmp(c->url,"https://example.com/v1/chat/completions"));headers=read_attempts=write_calls=0;sent=0;response_offset=0;first[0]=0;return (void *)2;}
 esp_err_t esp_http_client_set_header(void *c,const char *k,const char *v){assert(c&&k&&v);return ESP_OK;}
 esp_err_t esp_http_client_set_timeout_ms(void *c,int t){assert(c&&t==1000);return ESP_OK;}
 esp_err_t esp_http_client_open(void *c,int n){assert(c&&n>0);expected=(unsigned)n;tls_bytes=live_bytes;
@@ -96,7 +96,7 @@ int esp_http_client_write(void *c,const char *p,int n){assert(c&&p&&n>0&&n<=512&
  if(partial_write&&n>127)n=127;if(!sent)snprintf(first,sizeof(first),"%.*s",n<1023?n:1023,p);assert(sent+(size_t)n<sizeof(uploaded));memcpy(uploaded+sent,p,(size_t)n);sent+=(unsigned)n;uploaded[sent]=0;if(cancel_upload)app_game_voice_cancel();return n;}
 int64_t esp_http_client_fetch_headers(void *c){assert(c);assert(sent==expected);assert(live_bytes<tls_bytes);return ++headers<3?-ESP_ERR_HTTP_EAGAIN:(int64_t)strlen(response);}
 int esp_http_client_get_status_code(void *c){assert(c);return http_status;}
-int esp_http_client_read(void *c,char *p,int n){assert(c);if(read_error)return -1;if(++read_attempts==1)return -ESP_ERR_HTTP_EAGAIN;if(read_attempts>2)return 0;assert(n>(int)strlen(response));strcpy(p,response);return (int)strlen(response);}
+int esp_http_client_read(void *c,char *p,int n){assert(c);if(read_error)return -1;if(++read_attempts==1)return -ESP_ERR_HTTP_EAGAIN;size_t left=strlen(response)-response_offset;if(!left)return 0;if(left>(size_t)n)left=(size_t)n;memcpy(p,response+response_offset,left);response_offset+=left;return (int)left;}
 bool esp_http_client_is_complete_data_received(void *c){assert(c);return true;}
 esp_err_t esp_http_client_cleanup(void *c){assert(c);++closes;return ESP_OK;}
 static void begin_job(void){reads=0;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(view.state==GAME_VOICE_STARTING&&occupied);}
@@ -167,6 +167,13 @@ int main(void){
  http_status=401;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&view.error==401);http_status=200;
  response="{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"你好\"}}]}";
  send_early=false;begin_job();process_job();assert(reads==500&&view.milliseconds==10000);verify_audio(80000);printf("Full clip: audio=%zu TLS application allocations=%zu\n",tls_audio_bytes,tls_bytes);drain();assert(executes==1&&view.state==GAME_VOICE_REPLY&&spoken==2);
+ // The response reader handles long reasoning without retaining it or
+ // increasing its 6KB workspace; actual worker and adapter still validate.
+ static char large_response[15000];
+ strcpy(large_response,"{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"reasoning_content\":\"");
+ size_t prefix_size=strlen(large_response);memset(large_response+prefix_size,'x',12000);
+ strcpy(large_response+prefix_size+12000,"\",\"content\":\"你好\"}}]}");response=large_response;
+ send_early=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_REPLY&&executes==1&&spoken==3);
  response="{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"ask_clarification\",\"arguments\":\"{\\\"question\\\":\\\"给哪位选手加一分？\\\"}\"}}]}}]}";
  send_early=true;begin_job();process_job();drain();assert(follow_pending&&strstr(followup,"给哪位"));begin_job();assert(strstr(worker_input,"给哪位"));app_game_voice_cancel();process_job();drain();
  printf("Tracked voice allocations: peak=%zu, last TLS=%zu, no retained allocations\n",peak_bytes,tls_bytes);

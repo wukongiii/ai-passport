@@ -11,5 +11,7 @@ typedef struct {
     /* Optional streaming audio envelope: upload head + Base64 WAV + tail. */
     bool (*audio_parts)(ai_json_t *,const ai_model_request_t *,char *head,size_t,char *tail,size_t);
     bool (*decode)(ai_json_t *workspace,const char *,size_t,ai_reply_t *);
+    /* Optional auxiliary JSON string to discard while receiving the envelope. */
+    const char *discard_response_string;
 } ai_model_adapter_t;
 const ai_model_adapter_t *ai_model_adapter(const char *id);

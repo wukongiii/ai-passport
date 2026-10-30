@@ -103,10 +103,14 @@ run_static_checks() {
         -o "${test_dir}/test_ai_interaction"
     "${test_dir}/test_ai_interaction"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/game_voice_stubs -Itests/speech_stubs -Itests/bsp_stubs \
-        -DportMAX_DELAY=0xffffffffU tests/test_game_voice.c main/ai/voice_capture.c \
+        -DportMAX_DELAY=0xffffffffU tests/test_game_voice.c main/ai/voice_capture.c main/ai/ai_response_filter.c \
         main/ai/ai_json.c main/ai/ai_session.c main/ai/ai_provider.c main/ai/ai_chat_completions.c main/ui/app_actions.c \
         -lm -o "${test_dir}/test_game_voice"
     "${test_dir}/test_game_voice"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_ai_response_filter.c main/ai/ai_response_filter.c main/ai/ai_json.c \
+        -o "${test_dir}/test_ai_response_filter"
+    "${test_dir}/test_ai_response_filter"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/game_voice_stubs -Itests/speech_stubs -Itests/bsp_stubs \
         tests/test_ai_probe.c main/ai/ai_json.c -o "${test_dir}/test_ai_probe"
     "${test_dir}/test_ai_probe"
