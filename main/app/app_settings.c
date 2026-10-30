@@ -64,7 +64,7 @@ static void bindings(void *c, app_bindings_t *b) {
         app_actions_register(b,1,APP_GESTURE_LONG,BACK,TXT_APP_CANCEL,true,APP_ACTION_CANCEL);
     } else {
         app_actions_register(b,0,APP_GESTURE_SHORT,PREV,TXT_APP_PREVIOUS,!state.model.submenu || state.model.group==APP_SETTINGS_DISPLAY,APP_ACTION_NAVIGATE);
-        app_actions_register(b,1,APP_GESTURE_SHORT,OPEN,!state.model.submenu || state.model.focus==APP_SETTING_NETWORK ? TXT_APP_ENTER : TXT_APP_ADJUST,!state.model.submenu || state.model.focus!=APP_SETTING_INFO,APP_ACTION_CONFIRM);
+        app_actions_register(b,1,APP_GESTURE_SHORT,OPEN,TXT_APP_ENTER,!state.model.submenu || state.model.focus!=APP_SETTING_INFO,APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,NEXT,TXT_APP_NEXT,!state.model.submenu || state.model.group==APP_SETTINGS_DISPLAY,APP_ACTION_NAVIGATE);
     }
 }
@@ -115,6 +115,7 @@ static bool tick(void *c, int64_t now) {
     if(net.revision!=state.network.revision){state.network=net;changed=state.active;}
     app_preferences_t received;
     if(app_network_take_preferences(&received)){
+        if(state.model.editing && state.model.group!=APP_SETTINGS_DISPLAY)state.model.submenu=false;
         state.preferences=received;state.model.editing=false;state.model.draft=received;
         state.dirty=true;state.last_save=0;changed=true;
     }
@@ -162,13 +163,15 @@ static void render(void *c,const app_module_view_t *v) {
         return;
     }
     if(network_mounted){lv_obj_clean(content);create_settings_content();network_mounted=false;}
-    for(unsigned i=0;i<3;++i)visible(group_rows[i],!m->submenu);
-    if(!m->submenu){
+    const bool display_list=m->submenu && !m->editing && m->group==APP_SETTINGS_DISPLAY;
+    for(unsigned i=0;i<3;++i)visible(group_rows[i],!m->submenu || display_list);
+    if(!m->submenu || display_list){
         app_header_context(groups[m->group]);
         visible(range.root,false);visible(name,false);visible(value,false);visible(info,false);visible(hint,false);visible(status,false);
         for(unsigned i=0;i<2;++i)visible(direction_rows[i],false);
-        unsigned start=m->group>1?m->group-1:0;if(start>APP_SETTINGS_GROUP_COUNT-3)start=APP_SETTINGS_GROUP_COUNT-3;
-        for(unsigned i=0;i<3;++i){unsigned at=start+i;lv_label_set_text(group_rows[i],groups[at]);lv_obj_set_style_bg_color(group_rows[i],lv_color_hex(at==m->group?0x246B4E:0x1C303B),0);}
+        unsigned selected=display_list?m->focus:m->group,count=display_list?4:APP_SETTINGS_GROUP_COUNT;
+        unsigned start=selected>1?selected-1:0;if(start>count-3)start=count-3;
+        for(unsigned i=0;i<3;++i){unsigned at=start+i;lv_label_set_text(group_rows[i],display_list?names[at]:groups[at]);lv_obj_set_style_bg_color(group_rows[i],lv_color_hex(at==selected?0x246B4E:0x1C303B),0);}
         return;
     }
     visible(hint,true);visible(status,true);

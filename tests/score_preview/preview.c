@@ -249,7 +249,9 @@ int main(void) {
         app_container_input(&app,1,APP_GESTURE_LONG);
         assert(app.rotation==(r?APP_ROTATION_90:APP_ROTATION_270));
         app_ui_render(&app,91,"");capture(r?"settings-groups-90":"settings-groups-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r?"settings-display-list-90":"settings-display-list-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r?"settings-direction-90":"settings-direction-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r?"settings-brightness-90":"settings-brightness-270");
         app_container_input(&app,0,APP_GESTURE_SHORT);assert(app_settings_preview_brightness()==70);
@@ -259,14 +261,16 @@ int main(void) {
         app_ui_render(&app,91,"");capture(r?"settings-infinity-90":"settings-infinity-270");
         app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
         assert(app.page==APP_PAGE_MODULE);
-        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_bindings_t direct;app_container_bindings(&app,&direct);
+        assert(!strcmp(direct.actions[APP_GESTURE_SHORT][1].label,TXT_APP_CONFIRM)&&direct.actions[APP_GESTURE_SHORT][0].enabled);
         app_ui_render(&app,91,"");capture(r?"settings-volume-90":"settings-volume-270");
-        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
-        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r?"settings-double-90":"settings-double-270");
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);
         assert(app_settings_preferences()->double_click_ms==350);
-        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r?"settings-info-90":"settings-info-270");
         app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);assert(app.page==APP_PAGE_HOME);
     }

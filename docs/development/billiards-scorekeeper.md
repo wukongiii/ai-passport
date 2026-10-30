@@ -1382,3 +1382,17 @@ host checks cover group navigation/back/cancel/commit, range limits, legacy
 records, isolated phone patches, and BSP parameter forwarding/invalid states.
 Real LVGL previews exercise both landscape directions; physical double-click
 comfort and saved timing after restart require device acceptance.
+
+
+### Direct value adjustment
+
+Settings value pages accept left/right immediately. The Display group is now a
+list of its four items; opening an item shows editable direction choices or its
+slider directly, without a separate Adjust state. Middle confirms and returns
+to the list; holding middle discards the draft and returns. Sound and Operation
+currently have one item each, so entering either group opens its slider directly;
+confirm or cancel returns to the group list. Brightness preview still rolls back
+on cancel; orientation and double-click timing change only after confirmation.
+The existing new-match race slider already accepts direct adjustment and retains
+its explicit replacement confirmation. Finite host/real-LVGL checks cover immediate
+left/right, saved versus draft state, back/confirm destinations and both rotations.

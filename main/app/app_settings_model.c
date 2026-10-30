@@ -10,20 +10,20 @@ static uint16_t step(uint16_t value, const uint16_t *values, unsigned count, int
 bool app_settings_model_input(app_settings_model_t *m, app_preferences_t *p, unsigned slot, app_gesture_t gesture) {
     if(slot>=3) return false;
     if(gesture==APP_GESTURE_LONG && slot==1) {
-        if(m->editing){m->editing=false;m->draft=*p;}else m->submenu=false;
+        if(m->editing){m->editing=false;m->draft=*p;if(m->group!=APP_SETTINGS_DISPLAY)m->submenu=false;}else m->submenu=false;
         return false;
     }
     if(gesture!=APP_GESTURE_SHORT) return false;
     static const unsigned first[]={APP_SETTING_DIRECTION,APP_SETTING_VOLUME,APP_SETTING_DOUBLE,APP_SETTING_INFO,APP_SETTING_NETWORK};
     if(!m->submenu){
-        if(slot==1){m->submenu=true;m->focus=first[m->group];}
+        if(slot==1){m->submenu=true;m->focus=first[m->group];m->draft=*p;m->editing=m->group==APP_SETTINGS_SOUND||m->group==APP_SETTINGS_OPERATION;}
         else m->group=(m->group+APP_SETTINGS_GROUP_COUNT+(slot==0?-1:1))%APP_SETTINGS_GROUP_COUNT;
         return false;
     }
     if(slot==1) {
         if(m->focus==APP_SETTING_INFO || m->focus==APP_SETTING_NETWORK) return false;
         if(!m->editing) {m->editing=true; m->draft=*p; return false;}
-        *p=m->draft; m->editing=false; return true;
+        *p=m->draft;m->editing=false;if(m->group!=APP_SETTINGS_DISPLAY)m->submenu=false;return true;
     }
     const int delta=slot==0 ? -1 : 1;
     if(!m->editing) {if(m->group==APP_SETTINGS_DISPLAY)m->focus=(m->focus+4+delta)%4;return false;}
