@@ -112,7 +112,7 @@ static app_module_effect_t input(void *c,app_rotation_t r,unsigned slot,app_gest
             else if(slot==1){
                 app_speech_snapshot_t speech;app_speech_snapshot(&speech);
                 if(speech.pending||speech.state==SPEECH_PLAYING||speech.state==SPEECH_STOPPING)app_speech_stop();
-                else state.rejected=!app_speech_say(phrases[state.selected]);
+                else if(speech.enabled)state.rejected=!app_speech_say(phrases[state.selected]);
             }
             else app_speech_stop();
             break;
@@ -196,7 +196,7 @@ static void render(void *c,const app_module_view_t *v){
         static const char *const messages[]={TXT_VOICE_READY,TXT_VOICE_WAIT,TXT_VOICE_PLAYING,TXT_VOICE_DONE,TXT_VOICE_FAILED,TXT_VOICE_STOPPING};
         const app_speech_snapshot_t *s=&state.speech;
         if(state.rejected || s->state==SPEECH_FAILED)lv_label_set_text_fmt(detail,"%s (%d)",s->error ? (s->error==0x103 ? TXT_ERROR_BUSY : s->error==-1 ? TXT_ERROR_GENERIC : app_error_label(s->error)) : TXT_ERROR_BUSY,s->error);
-        else lv_label_set_text(detail,messages[s->state]);
+        else lv_label_set_text(detail,s->enabled ? messages[s->state] : TXT_APP_DISABLED);
         lv_label_set_text(note,s->pending && s->state==SPEECH_PLAYING ? TXT_VOICE_PENDING : TXT_VOICE_NOTE);return;
     }
     app_header_context(TXT_AI_MODELS);

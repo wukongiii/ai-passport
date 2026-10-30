@@ -38,20 +38,32 @@ int main(void) {
     assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT) && p.rotation==APP_ROTATION_270);
     app_settings_model_enter(&m,&p);
     app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);assert(m.group==APP_SETTINGS_SOUND);
-    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);assert(m.editing&&m.focus==APP_SETTING_VOLUME);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);assert(m.submenu&&!m.editing&&m.focus==APP_SETTING_VOLUME);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);assert(m.editing);
     app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);
     assert(m.draft.volume==50&&p.volume==APP_VOLUME_DEFAULT);
-    app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(p.volume==APP_VOLUME_DEFAULT&&!m.submenu);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(p.volume==APP_VOLUME_DEFAULT&&m.submenu&&!m.editing);
     app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
     for(unsigned i=0;i<6;++i)app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);
     assert(m.draft.volume==100&&app_settings_range_index(&m,&p)==10);
-    assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT)&&p.volume==100&&!m.submenu);
-    app_preferences_encode(&p,b);assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100);
+    assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT)&&p.volume==100&&m.submenu&&!m.editing);
+    app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);assert(m.focus==APP_SETTING_SPEECH);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);assert(m.editing&&m.draft.speech_enabled);
+    app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);assert(!m.draft.speech_enabled&&p.speech_enabled);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_LONG);assert(p.speech_enabled&&m.submenu&&!m.editing);
+    app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT);
+    app_settings_model_input(&m,&p,0,APP_GESTURE_SHORT);
+    assert(app_settings_model_input(&m,&p,1,APP_GESTURE_SHORT)&&!p.speech_enabled&&p.volume==100);
+    app_preferences_encode(&p,b);assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100&&!decoded.speech_enabled);
+    b[12]=2;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];assert(!app_preferences_decode(&decoded,b,sizeof(b)));
+    // Version 3 preserves the operation interval and enables the new speech policy.
+    app_preferences_encode(&p,b);b[2]=3;b[12]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
+    assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100&&decoded.speech_enabled&&decoded.double_click_ms==350);
     // Previous format retains display settings and supplies the default volume.
-    b[2]=1;b[9]=b[10]=b[11]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
+    b[2]=1;b[9]=b[10]=b[11]=b[12]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
     assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==APP_VOLUME_DEFAULT&&decoded.brightness==p.brightness);
     // Version 2 keeps volume/display and defaults the new operation preference.
-    app_preferences_encode(&p,b);b[2]=2;b[10]=b[11]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
+    app_preferences_encode(&p,b);b[2]=2;b[10]=b[11]=b[12]=0;b[15]=0;for(unsigned i=0;i<15;++i)b[15]^=b[i];
     assert(app_preferences_decode(&decoded,b,sizeof(b))&&decoded.volume==100&&decoded.double_click_ms==350);
     app_settings_model_enter(&m,&p);
     for(unsigned i=0;i<2;++i)app_settings_model_input(&m,&p,2,APP_GESTURE_SHORT);

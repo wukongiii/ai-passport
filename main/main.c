@@ -63,7 +63,7 @@ void app_main(void) {
     bsp_display_backlight(app_settings_preferences()->brightness);
     const bool battery_ready = bsp_battery_init() == ESP_OK;
     // Start silent; only the speech worker owns audio after this initialization.
-    if (bsp_audio_init() == ESP_OK && bsp_audio_sleep() != ESP_OK)
+    if (bsp_audio_init() == ESP_OK && bsp_audio_release() != ESP_OK)
         ESP_LOGW(TAG, "Codec suspend failed; power draw remains unverified");
     if(!app_speech_start())ESP_LOGW(TAG,"Speech worker unavailable");
     s_input_queue = xQueueCreate(16, sizeof(input_event_t));

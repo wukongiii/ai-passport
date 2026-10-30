@@ -12,7 +12,8 @@
 #include <string.h>
 static game_preferences_snapshot_t names={.revision=1};
 static score_session_t saved;
-static unsigned saves;
+static unsigned saves,spoken;
+bool app_speech_say(const char *text){assert(*text);++spoken;return true;}
 void game_preferences_snapshot(game_preferences_snapshot_t *out){*out=names;}
 score_store_status_t score_store_open(score_session_t *out){score_session_init(out);return SCORE_STORE_EMPTY;}
 esp_err_t score_store_save(const score_session_t *s){saved=*s;++saves;return ESP_OK;}
@@ -84,11 +85,12 @@ int main(void){
     ai_reply_t ignored={.kind=AI_REPLY_TEXT,.text="ignored"};
     assert(ai_session_finish(&session,app_container_ai_target(&app),token+1,150,&ignored,&completion)==AI_FLOW_DUPLICATE && session.pending);assert(ai_session_begin(&session,app_container_ai_target(&app),101,&snapshot,&token)==AI_FLOW_BUSY);
     assert(finish("adjust_score","{\"player_id\":\"p1\",\"delta\":1,\"expected_revision\":0}")==AI_FLOW_OK);
-    assert(completion.executed&&completion.changed&&strstr(completion.text,"[1,0]"));
+    assert(completion.executed&&completion.changed&&strstr(completion.text,"[1,0]")&&spoken==1);
     assert(ai_session_finish(&session,app_container_ai_target(&app),oldtoken,201,&reply,&completion)==AI_FLOW_DUPLICATE);
     app_container_tick(&app,1000);assert(saves==1&&saved.state.points[0]==1&&saved.history_count==1);
-    // Query never changes revision or history.
-    begin();assert(finish("get_score","{\"expected_revision\":1}")==AI_FLOW_OK&&completion.executed&&!completion.changed);
+    // Query never changes revision or history, but reads the score aloud.
+    unsigned before_query=spoken;
+    begin();assert(finish("get_score","{\"expected_revision\":1}")==AI_FLOW_OK&&completion.executed&&!completion.changed);assert(spoken==before_query+1);
     begin();assert(finish("adjust_score","{\"player_id\":\"p1\",\"delta\":0,\"expected_revision\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID&&!completion.executed);
     begin();assert(finish("adjust_score","{\"player_id\":\"张三\",\"delta\":1,\"expected_revision\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID);
     begin();assert(finish("adjust_score","{\"player_id\":\"p1\",\"delta\":1,\"expected_revision\":1,\"extra\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID);

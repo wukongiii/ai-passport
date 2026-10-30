@@ -1,6 +1,7 @@
 #include "games/eight_module.h"
 #include "score/score_store.h"
 #include "score/score_ui.h"
+#include "speech/app_speech.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +9,8 @@
 static score_session_t disk;
 static unsigned reads, saves, creates, renders;
 static bool fail_save;
+static unsigned spoken;static char last_speech[96];
+bool app_speech_say(const char *text){++spoken;snprintf(last_speech,sizeof(last_speech),"%s",text);return true;}
 static game_preferences_snapshot_t names={.revision=1};
 void game_preferences_snapshot(game_preferences_snapshot_t *out) { *out=names; }
 score_store_status_t score_store_open(score_session_t *s) { ++reads; *s = disk; return SCORE_STORE_LOADED; }
@@ -30,7 +33,7 @@ int main(void) {
     app_bindings_t b; m->ops->bindings(m->context, &b);
     assert(!b.actions[APP_GESTURE_LONG][1].id); // Container may supply Home.
     const app_module_effect_t e = m->ops->input(m->context, APP_ROTATION_270, 0, APP_GESTURE_SHORT);
-    assert(!e.rotation_changed);
+    assert(!e.rotation_changed && spoken==1 && !strcmp(last_speech,"当前比分 3 比 0"));
     fail_save = true; m->ops->tick(m->context, 100); assert(saves == 1 && disk.state.points[0] == 2);
     assert(m->ops->leave(m->context));
     fail_save = false; m->ops->tick(m->context, 5000100);
@@ -38,7 +41,8 @@ int main(void) {
     assert(m->ops->enter(m->context, APP_ROTATION_90));
     m->ops->input(m->context, APP_ROTATION_90, 0, APP_GESTURE_LONG);
     m->ops->tick(m->context, 5000200);
-    assert(disk.state.points[0] == 2 && disk.history_count == 2);
+    assert(disk.state.points[0] == 2 && disk.history_count == 2 && spoken==2 && !strcmp(last_speech,"当前比分 2 比 0"));
+    m->ops->input(m->context,APP_ROTATION_90,2,APP_GESTURE_LONG);assert(spoken==2); // Rejected zero-score decrement.
     assert(m->ops->ui_create(m->context, &disk));
     const app_module_view_t view = {APP_ROTATION_90, 192, 85, ""};
     strcpy(names.eight.players[0],"张三");++names.revision;
@@ -47,6 +51,10 @@ int main(void) {
     assert(disk.state.points[0]==2 && disk.history_count==2);
     m->ops->input(m->context, APP_ROTATION_90, 1, APP_GESTURE_SHORT);
     m->ops->ui_render(m->context, &view);
-    assert(creates == 1 && renders == 1 && reads == 1);
+    assert(creates == 1 && renders == 1 && reads == 1 && spoken==2);
+    // Manual undo uses the same committed-score feedback path.
+    m->ops->input(m->context,APP_ROTATION_90,2,APP_GESTURE_SHORT);
+    m->ops->input(m->context,APP_ROTATION_90,1,APP_GESTURE_SHORT);
+    assert(spoken==3&&!strcmp(last_speech,"当前比分 3 比 0"));
     puts("Eight-ball adapter re-entry, legacy restore, inactive save retry and view: PASS");
 }

@@ -33,8 +33,8 @@ int main(void){
     assert(app_preferences_load(&p)==APP_PREF_MIGRATED && p.rotation==APP_ROTATION_90 && !writes);
     fail_write=true;assert(app_preferences_save(&p)==ESP_FAIL);fail_write=false;
     fail_commit=true;assert(app_preferences_save(&p)==ESP_FAIL);fail_commit=false;
-    assert(app_preferences_save(&p)==ESP_OK);
-    assert(app_preferences_load(&p)==APP_PREF_LOADED && p.rotation==APP_ROTATION_90);
+    p.speech_enabled=false;assert(app_preferences_save(&p)==ESP_OK);
+    assert(app_preferences_load(&p)==APP_PREF_LOADED && p.rotation==APP_ROTATION_90 && !p.speech_enabled);
     config[2]=99;assert(app_preferences_load(&p)==APP_PREF_INVALID && p.rotation==APP_ROTATION_270);
     oversize=true;assert(app_preferences_load(&p)==APP_PREF_INVALID);oversize=false;
     fail_read=true;assert(app_preferences_load(&p)==APP_PREF_UNAVAILABLE);

@@ -28,7 +28,7 @@ static net_setup_ui_t network_ui;
 static bool network_mounted;
 static void create_settings_content(void);
 static app_range_t range;
-static const char *names[]={TXT_APP_DIRECTION,TXT_APP_BRIGHTNESS,TXT_APP_DIM,TXT_APP_BLANK,TXT_APP_INFO,TXT_APP_NETWORK,TXT_APP_VOLUME,TXT_SETTINGS_DOUBLE};
+static const char *names[]={TXT_APP_DIRECTION,TXT_APP_BRIGHTNESS,TXT_APP_DIM,TXT_APP_BLANK,TXT_APP_INFO,TXT_APP_NETWORK,TXT_APP_VOLUME,TXT_SETTINGS_DOUBLE,TXT_APP_SPEECH};
 static const char *groups[]={TXT_SETTINGS_DISPLAY,TXT_SETTINGS_SOUND,TXT_SETTINGS_OPERATION,TXT_SETTINGS_ABOUT,TXT_SETTINGS_NETWORK};
 const app_preferences_t *app_settings_preferences(void) {return &state.preferences;}
 uint8_t app_settings_preview_brightness(void) {
@@ -40,6 +40,8 @@ static void init(void *c) {
     (void)c; if(state.initialized) return;
     app_pref_store_status_t result=app_preferences_load(&state.preferences);
     state.storage=result==APP_PREF_INVALID ? TXT_APP_PREF_BAD : result==APP_PREF_UNAVAILABLE ? TXT_APP_PREF_FAILED : "";
+    app_speech_set_enabled(state.preferences.speech_enabled);
+    app_speech_set_volume(state.preferences.volume);
     state.dirty=result==APP_PREF_MIGRATED; state.initialized=true;
 }
 static bool enter(void *c, app_rotation_t r) {
@@ -55,7 +57,7 @@ static void bindings(void *c, app_bindings_t *b) {
     if(state.model.submenu && !state.model.editing)app_actions_register(b,1,APP_GESTURE_LONG,BACK,TXT_APP_BACK,true,APP_ACTION_BACK);
     const bool edit=state.model.editing;
     if(edit) {
-        const bool direction=state.model.focus==APP_SETTING_DIRECTION;
+        const bool direction=state.model.focus==APP_SETTING_DIRECTION || state.model.focus==APP_SETTING_SPEECH;
         const unsigned index=app_settings_range_index(&state.model,&state.preferences);
         const unsigned maximum=state.model.focus==APP_SETTING_DOUBLE ? (APP_DOUBLE_MAX-APP_DOUBLE_MIN)/APP_DOUBLE_STEP : state.model.focus==APP_SETTING_VOLUME ? 100/APP_VOLUME_STEP : state.model.focus==APP_SETTING_BRIGHTNESS ? 8 : 4;
         app_actions_register(b,0,APP_GESTURE_SHORT,direction ? LEFT : MINUS,direction ? TXT_APP_PREVIOUS : TXT_APP_REDUCE,direction || index>0,APP_ACTION_NAVIGATE);
@@ -63,9 +65,9 @@ static void bindings(void *c, app_bindings_t *b) {
         app_actions_register(b,2,APP_GESTURE_SHORT,direction ? RIGHT : PLUS,direction ? TXT_APP_NEXT : TXT_APP_INCREASE,direction || index<maximum,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_LONG,BACK,TXT_APP_CANCEL,true,APP_ACTION_CANCEL);
     } else {
-        app_actions_register(b,0,APP_GESTURE_SHORT,PREV,TXT_APP_PREVIOUS,!state.model.submenu || state.model.group==APP_SETTINGS_DISPLAY,APP_ACTION_NAVIGATE);
+        app_actions_register(b,0,APP_GESTURE_SHORT,PREV,TXT_APP_PREVIOUS,!state.model.submenu || (state.model.group==APP_SETTINGS_DISPLAY || state.model.group==APP_SETTINGS_SOUND),APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_SHORT,OPEN,TXT_APP_ENTER,!state.model.submenu || state.model.focus!=APP_SETTING_INFO,APP_ACTION_CONFIRM);
-        app_actions_register(b,2,APP_GESTURE_SHORT,NEXT,TXT_APP_NEXT,!state.model.submenu || state.model.group==APP_SETTINGS_DISPLAY,APP_ACTION_NAVIGATE);
+        app_actions_register(b,2,APP_GESTURE_SHORT,NEXT,TXT_APP_NEXT,!state.model.submenu || (state.model.group==APP_SETTINGS_DISPLAY || state.model.group==APP_SETTINGS_SOUND),APP_ACTION_NAVIGATE);
     }
 }
 static app_module_effect_t input(void *c, app_rotation_t rotation, unsigned slot, app_gesture_t gesture) {
@@ -115,11 +117,12 @@ static bool tick(void *c, int64_t now) {
     if(net.revision!=state.network.revision){state.network=net;changed=state.active;}
     app_preferences_t received;
     if(app_network_take_preferences(&received)){
-        if(state.model.editing && state.model.group!=APP_SETTINGS_DISPLAY)state.model.submenu=false;
+        if(state.model.editing && state.model.group==APP_SETTINGS_OPERATION)state.model.submenu=false;
         state.preferences=received;state.model.editing=false;state.model.draft=received;
         state.dirty=true;state.last_save=0;changed=true;
     }
     app_network_publish_preferences(&state.preferences);
+    app_speech_set_enabled(state.preferences.speech_enabled);
     app_speech_set_volume(state.preferences.volume);
     if(!state.dirty || (state.last_save && now-state.last_save<5000000)) return changed;
     state.last_save=now;state.dirty=app_preferences_save(&state.preferences)!=ESP_OK;
@@ -164,14 +167,16 @@ static void render(void *c,const app_module_view_t *v) {
     }
     if(network_mounted){lv_obj_clean(content);create_settings_content();network_mounted=false;}
     const bool display_list=m->submenu && !m->editing && m->group==APP_SETTINGS_DISPLAY;
-    for(unsigned i=0;i<3;++i)visible(group_rows[i],!m->submenu || display_list);
-    if(!m->submenu || display_list){
+    const bool sound_list=m->submenu && !m->editing && m->group==APP_SETTINGS_SOUND;
+    const bool list=display_list || sound_list;
+    for(unsigned i=0;i<3;++i)visible(group_rows[i],!m->submenu || list);
+    if(!m->submenu || list){
         app_header_context(groups[m->group]);
         visible(range.root,false);visible(name,false);visible(value,false);visible(info,false);visible(hint,false);visible(status,false);
         for(unsigned i=0;i<2;++i)visible(direction_rows[i],false);
-        unsigned selected=display_list?m->focus:m->group,count=display_list?4:APP_SETTINGS_GROUP_COUNT;
-        unsigned start=selected>1?selected-1:0;if(start>count-3)start=count-3;
-        for(unsigned i=0;i<3;++i){unsigned at=start+i;lv_label_set_text(group_rows[i],display_list?names[at]:groups[at]);lv_obj_set_style_bg_color(group_rows[i],lv_color_hex(at==selected?0x246B4E:0x1C303B),0);}
+        unsigned selected=display_list?m->focus:sound_list?(m->focus==APP_SETTING_SPEECH):m->group,count=display_list?4:sound_list?2:APP_SETTINGS_GROUP_COUNT;
+        unsigned start=selected>1?selected-1:0;if(count>3 && start>count-3)start=count-3;
+        for(unsigned i=0;i<3;++i){unsigned at=start+i;visible(group_rows[i],at<count);if(at>=count)continue;lv_label_set_text(group_rows[i],display_list?names[at]:sound_list?names[at?APP_SETTING_SPEECH:APP_SETTING_VOLUME]:groups[at]);lv_obj_set_style_bg_color(group_rows[i],lv_color_hex(at==selected?0x246B4E:0x1C303B),0);}
         return;
     }
     visible(hint,true);visible(status,true);
@@ -184,9 +189,10 @@ static void render(void *c,const app_module_view_t *v) {
 
     visible(range.root,is_range);visible(name,m->focus==APP_SETTING_NETWORK);visible(value,m->focus==APP_SETTING_NETWORK);visible(info,m->focus==APP_SETTING_INFO || m->focus==APP_SETTING_NETWORK);
     for(unsigned i=0;i<2;++i){
-        visible(direction_rows[i],m->focus==APP_SETTING_DIRECTION);
-        bool selected=p->rotation==(i ? APP_ROTATION_90 : APP_ROTATION_270);
-        lv_label_set_text_fmt(direction_rows[i],"%s %s",selected ? ">" : " ",i ? TXT_APP_ROTATE_BOTTOM : TXT_APP_ROTATE_TOP);
+        const bool speech=m->focus==APP_SETTING_SPEECH;
+        visible(direction_rows[i],m->focus==APP_SETTING_DIRECTION || speech);
+        bool selected=speech ? p->speech_enabled==(i==1) : p->rotation==(i ? APP_ROTATION_90 : APP_ROTATION_270);
+        lv_label_set_text_fmt(direction_rows[i],"%s %s",selected ? ">" : " ",speech ? (i ? TXT_APP_ENABLED : TXT_APP_DISABLED) : i ? TXT_APP_ROTATE_BOTTOM : TXT_APP_ROTATE_TOP);
         lv_obj_set_style_bg_color(direction_rows[i],lv_color_hex(selected ? 0x246B4E : 0x1C303B),0);
     }
     if(is_range) {
@@ -198,7 +204,7 @@ static void render(void *c,const app_module_view_t *v) {
         else snprintf(current,sizeof(current),"%s",TXT_APP_UNLIMITED);
         app_range_render(&range,app_settings_range_index(m,&state.preferences),dbl ? (APP_DOUBLE_MAX-APP_DOUBLE_MIN)/APP_DOUBLE_STEP : volume ? 100/APP_VOLUME_STEP : brightness ? 8 : 4,current,
             dbl ? "200 ms" : volume ? "0%" : brightness ? "20%" : m->focus==APP_SETTING_DIM ? "15 s" : "60 s",dbl ? "450 ms" : brightness || volume ? "100%" : TXT_APP_UNLIMITED,m->editing);
-    } else if(m->focus==APP_SETTING_DIRECTION) {}
+    } else if(m->focus==APP_SETTING_DIRECTION || m->focus==APP_SETTING_SPEECH) {}
     else if(m->focus==APP_SETTING_NETWORK){
         char ssid[100];net_setup_display_ssid(state.network.ssid,ssid,sizeof(ssid));
         // Independent single-line rows: font metrics must not position the IP

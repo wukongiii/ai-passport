@@ -172,7 +172,7 @@ bool app_game_voice_tick(ai_game_target_t target,int64_t now){
    else if(result.executed){
     ai_json_t *json=malloc(sizeof(*json));char text[AI_TEXT_CAPACITY];
     bool message=json&&ai_json_parse(json,result.text,strlen(result.text))&&ai_json_string(json,ai_json_member(json,0,"message"),text,sizeof(text));free(json);
-    if(message){publish(GAME_VOICE_REPLY,0,text);app_speech_say(text);}
+    if(message){publish(GAME_VOICE_REPLY,0,text);}
     else publish(GAME_VOICE_REPLY,0,TXT_GAME_VOICE_DONE);
    }else{
     publish(GAME_VOICE_REPLY,0,result.text);app_speech_say(result.text);

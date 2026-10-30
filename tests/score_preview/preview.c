@@ -46,9 +46,10 @@ bool app_network_connect(const app_net_credentials_t *c){(void)c;return true;}
 
 void app_network_publish_preferences(const app_preferences_t *p){(void)p;}
 bool app_network_take_preferences(app_preferences_t *p){(void)p;return false;}
-static app_speech_snapshot_t speech_preview={.volume=65};
+static app_speech_snapshot_t speech_preview={.volume=65,.enabled=true};
 bool app_speech_start(void){return true;}
-bool app_speech_say(const char *text){(void)text;speech_preview.state=SPEECH_WAITING;speech_preview.pending=true;++speech_preview.revision;return true;}
+bool app_speech_say(const char *text){(void)text;if(!speech_preview.enabled)return false;speech_preview.state=SPEECH_WAITING;speech_preview.pending=true;++speech_preview.revision;return true;}
+void app_speech_set_enabled(bool enabled){speech_preview.enabled=enabled;if(!enabled)app_speech_stop();}
 void app_speech_set_volume(unsigned v){speech_preview.volume=v;}
 void app_speech_stop(void){speech_preview.state=SPEECH_IDLE;speech_preview.pending=false;++speech_preview.revision;}
 void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_preview;}
@@ -262,10 +263,17 @@ int main(void) {
         app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
         assert(app.page==APP_PAGE_MODULE);
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-sound-list-90":"settings-sound-list-270");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-speech-on-90":"settings-speech-on-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);
+        app_ui_render(&app,91,"");capture(r?"settings-speech-off-90":"settings-speech-off-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);assert(app_settings_preferences()->speech_enabled);
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_bindings_t direct;app_container_bindings(&app,&direct);
         assert(!strcmp(direct.actions[APP_GESTURE_SHORT][1].label,TXT_APP_CONFIRM)&&direct.actions[APP_GESTURE_SHORT][0].enabled);
         app_ui_render(&app,91,"");capture(r?"settings-volume-90":"settings-volume-270");
-        app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r?"settings-double-90":"settings-double-270");
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);

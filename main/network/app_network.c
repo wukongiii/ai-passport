@@ -156,6 +156,7 @@ static esp_err_t status(httpd_req_t *r){
     cJSON_AddStringToObject(body,"ssid",s.ssid);cJSON_AddStringToObject(body,"token",session_token);
     cJSON_AddNumberToObject(body,"rotation",p.rotation);cJSON_AddNumberToObject(body,"brightness",p.brightness);
     cJSON_AddNumberToObject(body,"volume",p.volume);
+    cJSON_AddBoolToObject(body,"speech_enabled",p.speech_enabled);
     cJSON_AddNumberToObject(body,"double_click_ms",p.double_click_ms);
     cJSON_AddStringToObject(body,"version",esp_app_get_description()->version);
     cJSON_AddNumberToObject(body,"dim",p.dim_seconds);cJSON_AddNumberToObject(body,"blank",p.blank_seconds);

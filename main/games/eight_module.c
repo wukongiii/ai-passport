@@ -1,5 +1,7 @@
 #include "eight_module.h"
 #include "eight_ai.h"
+#include "../speech/app_speech.h"
+#include <stdio.h>
 #include "game_preferences.h"
 #include "../app/app_strings.h"
 #include "../score/score_controller.h"
@@ -49,6 +51,11 @@ static void bindings(void *context, app_bindings_t *b) {
     (void)context;
     score_controller_bindings(&state.controller, &state.session, b);
 }
+static void announce(void){
+    char text[96];
+    snprintf(text,sizeof(text),TXT_GAME_VOICE_SCORE,(long)state.session.state.points[0],(long)state.session.state.points[1]);
+    app_speech_say(text);
+}
 static score_result_t dispatch(const score_command_t *c) {
     const score_result_t result=score_dispatch(&state.session,c);
     state.status=result==SCORE_NO_HISTORY ? TXT_NO_HISTORY : result!=SCORE_OK ? TXT_REJECTED :
@@ -59,6 +66,7 @@ static score_result_t dispatch(const score_command_t *c) {
     if(result==SCORE_OK){
         if(c->type==SCORE_CMD_NEW_MATCH)state.preserve_unknown=false;
         state.dirty=true;state.last_save=0;
+        announce();
     }
     return result;
 }
@@ -93,6 +101,7 @@ static ai_game_result_t ai_execute(void *context,uint32_t revision,uint32_t conf
         score_result_t applied=dispatch(&command);
         if(applied!=SCORE_OK)return applied==SCORE_FINISHED ? AI_GAME_FINISHED : applied==SCORE_NO_HISTORY ? AI_GAME_NO_HISTORY : applied==SCORE_STALE ? AI_GAME_STALE : AI_GAME_INVALID;
     }
+    if(!command.type)announce(); // Queries also use the authoritative game score.
     return eight_ai_result(&state.session,result,capacity) ? AI_GAME_OK : AI_GAME_INVALID;
 }
 static const ai_game_ops_t ai_ops={ai_snapshot,ai_stamp,ai_execute,eight_ai_definition};

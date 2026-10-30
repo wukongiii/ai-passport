@@ -43,10 +43,10 @@ static bool number(const char *form,const char *key,unsigned *out){
     *out=(unsigned)strtoul(b,NULL,10);return true;
 }
 bool app_net_parse_preferences(const char *form,app_preferences_t *out){
-    unsigned r,b,d,k,v,dc;
+    unsigned r,b,d,k,v,dc,se;
     if(!number(form,"rotation",&r)||!number(form,"brightness",&b)||!number(form,"dim",&d)||!number(form,"blank",&k)||!number(form,"volume",&v) || v>100 || b>255 || d>65535 || k>65535)return false;
-    if(!number(form,"double_click_ms",&dc)||dc>65535)return false;
-    app_preferences_t p={.rotation=(app_rotation_t)r,.brightness=(uint8_t)b,.dim_seconds=(uint16_t)d,.blank_seconds=(uint16_t)k,.volume=(uint8_t)v,.double_click_ms=(uint16_t)dc};
+    if(!number(form,"double_click_ms",&dc)||dc>65535 || !number(form,"speech_enabled",&se) || se>1)return false;
+    app_preferences_t p={.rotation=(app_rotation_t)r,.brightness=(uint8_t)b,.dim_seconds=(uint16_t)d,.blank_seconds=(uint16_t)k,.volume=(uint8_t)v,.double_click_ms=(uint16_t)dc,.speech_enabled=se!=0};
     if(!app_preferences_valid(&p))return false;
     *out=p;return true;
 }
@@ -57,8 +57,8 @@ bool app_net_patch_preferences(const char *form,const app_preferences_t *current
         if(!number(form,"rotation",&a)||!number(form,"brightness",&b)||!number(form,"dim",&c)||!number(form,"blank",&d)||a>65535||b>255||c>65535||d>65535)return false;
         p.rotation=(app_rotation_t)a;p.brightness=(uint8_t)b;p.dim_seconds=(uint16_t)c;p.blank_seconds=(uint16_t)d;
     }else if(!strcmp(section,"sound")){
-        if(!number(form,"volume",&a)||a>100)return false;
-        p.volume=(uint8_t)a;
+        if(!number(form,"volume",&a)||a>100 || !number(form,"speech_enabled",&b) || b>1)return false;
+        p.volume=(uint8_t)a;p.speech_enabled=b!=0;
     }else if(!strcmp(section,"operation")){
         if(!number(form,"double_click_ms",&a)||a>65535)return false;
         p.double_click_ms=(uint16_t)a;

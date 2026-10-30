@@ -1,6 +1,6 @@
 #include "app_preferences.h"
 app_preferences_t app_preferences_default(void) {
-    return (app_preferences_t){APP_ROTATION_270, 80, 30, 120, APP_DOUBLE_DEFAULT, APP_VOLUME_DEFAULT};
+    return (app_preferences_t){APP_ROTATION_270, 80, 30, 120, APP_DOUBLE_DEFAULT, APP_VOLUME_DEFAULT, true};
 }
 bool app_preferences_valid(const app_preferences_t *p) {
     if (!p || !app_rotation_valid(p->rotation) || p->brightness < 20 || p->brightness > 100 || p->brightness % 10 || p->volume>100 || p->volume%APP_VOLUME_STEP || p->double_click_ms<APP_DOUBLE_MIN || p->double_click_ms>APP_DOUBLE_MAX || (p->double_click_ms-APP_DOUBLE_MIN)%APP_DOUBLE_STEP) return false;
@@ -10,17 +10,18 @@ bool app_preferences_valid(const app_preferences_t *p) {
 }
 void app_preferences_encode(const app_preferences_t *p, uint8_t b[APP_PREFERENCES_SIZE]) {
     for (unsigned i=0;i<APP_PREFERENCES_SIZE;++i) b[i]=0;
-    b[0]='A'; b[1]='P'; b[2]=3; b[3]=p->rotation == APP_ROTATION_90 ? 1 : 3;
+    b[0]='A'; b[1]='P'; b[2]=4; b[3]=p->rotation == APP_ROTATION_90 ? 1 : 3;
     b[4]=p->brightness; b[5]=p->dim_seconds; b[6]=p->dim_seconds>>8;
-    b[9]=p->volume;b[10]=p->double_click_ms;b[11]=p->double_click_ms>>8;
+    b[12]=p->speech_enabled; b[9]=p->volume;b[10]=p->double_click_ms;b[11]=p->double_click_ms>>8;
     b[7]=p->blank_seconds; b[8]=p->blank_seconds>>8;
     for (unsigned i=0;i<15;++i) b[15]^=b[i];
 }
 bool app_preferences_decode(app_preferences_t *p, const uint8_t *b, unsigned size) {
-    if (!p || !b || size != APP_PREFERENCES_SIZE || b[0]!='A' || b[1]!='P' || (b[2]<1 || b[2]>3) || (b[3]!=1 && b[3]!=3)) return false;
+    if (!p || !b || size != APP_PREFERENCES_SIZE || b[0]!='A' || b[1]!='P' || (b[2]<1 || b[2]>4) || (b[3]!=1 && b[3]!=3)) return false;
     uint8_t sum=0; for(unsigned i=0;i<16;++i) sum^=b[i];
-    for(unsigned i=b[2]==1 ? 9 : b[2]==2 ? 10 : 12;i<15;++i) if(b[i]) return false;
-    app_preferences_t v={b[3]==1 ? APP_ROTATION_90 : APP_ROTATION_270,b[4],b[5]|b[6]<<8,b[7]|b[8]<<8,b[2]<3 ? APP_DOUBLE_DEFAULT : b[10]|b[11]<<8,b[2]==1 ? APP_VOLUME_DEFAULT : b[9]};
+    for(unsigned i=b[2]==1 ? 9 : b[2]==2 ? 10 : b[2]==3 ? 12 : 13;i<15;++i) if(b[i]) return false;
+    app_preferences_t v={b[3]==1 ? APP_ROTATION_90 : APP_ROTATION_270,b[4],b[5]|b[6]<<8,b[7]|b[8]<<8,b[2]<3 ? APP_DOUBLE_DEFAULT : b[10]|b[11]<<8,b[2]==1 ? APP_VOLUME_DEFAULT : b[9],b[2]<4 || b[12]==1};
+    if(b[2]==4 && b[12]>1)return false;
     if(sum || !app_preferences_valid(&v)) return false;
     *p=v; return true;
 }

@@ -1360,7 +1360,7 @@ with its scores, players and revision. HTTP does not read live game state.
 
 Device settings has five first-level groups in order: Display, Sound, Operation,
 About and Network. Display contains direction, brightness, automatic dimming and
-blanking; Sound contains speech volume; Operation contains double-click interval;
+blanking; Sound contains speech volume and a master speech switch; Operation contains double-click interval;
 About shows device information; Network retains connection and provisioning pages.
 Middle enters/edits/confirms. Holding middle cancels an edit, returns one level,
 or leaves settings from the group list. The phone portal uses separate Display,
@@ -1389,10 +1389,38 @@ comfort and saved timing after restart require device acceptance.
 Settings value pages accept left/right immediately. The Display group is now a
 list of its four items; opening an item shows editable direction choices or its
 slider directly, without a separate Adjust state. Middle confirms and returns
-to the list; holding middle discards the draft and returns. Sound and Operation
-currently have one item each, so entering either group opens its slider directly;
-confirm or cancel returns to the group list. Brightness preview still rolls back
+to the list; holding middle discards the draft and returns. Operation currently has one item, so entering it opens its slider directly;
+confirm or cancel returns to the group list. Sound lists volume and speech;
+selecting either opens immediate editing, then confirm/cancel returns to Sound. Brightness preview still rolls back
 on cancel; orientation and double-click timing change only after confirmation.
 The existing new-match race slider already accepts direct adjustment and retains
 its explicit replacement confirmation. Finite host/real-LVGL checks cover immediate
 left/right, saved versus draft state, back/confirm destinations and both rotations.
+
+
+### Unified score feedback and master speech switch
+
+Chinese eight-ball submits short current-score feedback after a successful game
+command, including manual adjustments, undo, new match and AI incremental, absolute
+or atomic corrections. Queries also announce the score; rejected or stale commands
+do not. AI orchestration displays tool results without speaking them again. Text
+answers and clarifications still use the same speech service. Rapid operations
+retain the existing latest-pending-text merge behavior.
+
+Device Sound → Speech and the phone Sound block share a default-enabled master
+switch. Its option page accepts left/right immediately, middle saves, and middle
+hold cancels. Disabling clears pending speech, interrupts active playback at the
+next PCM boundary, and refuses subsequent speech, including scores, AI answers and
+local playback tests. Recording and AI scoring remain available. Re-enabling never
+replays old text; volume is retained independently.
+
+The 16-byte preferences record is version 4, with byte 12 storing 0/1. Versions
+1–3 retain their prior values and default to enabled. Phone status returns the
+`speech_enabled` boolean; Sound updates submit `speech_enabled=0/1` and volume.
+Other categories preserve the switch. Startup and completed speech release idle
+audio DMA so retained buffers cannot reduce TTS headroom for manual-only scoring.
+
+Validation for this increment: complete gate (host tests and firmware) PASS; finite
+real-LVGL previews PASS at 90°/270°, peak 24792 bytes. A 390 px browser with mock
+APIs verified off/save/reload, retained volume and no overflow or console errors.
+Physical sound, stop timing and device persistence remain unverified.

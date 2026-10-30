@@ -9,7 +9,7 @@ const esp_tts_voice_t esp_tts_voice_template={0};
 static esp_tts_voice_t fake_voice;
 static bool sleeping=true;
 static int wakes,writes,sleeps,phase,creates,destroys,parses;
-static bool interrupt_write,change_volume;
+static bool interrupt_write,change_volume,disable_write;
 static unsigned applied_volume;
 static esp_err_t wake_error;
 static size_t free_heap=100000,largest_block=90000;
@@ -25,8 +25,9 @@ esp_err_t bsp_audio_init(void){return ESP_OK;}
 esp_err_t bsp_audio_wake(void){++wakes;if(wake_error)return wake_error;sleeping=false;return ESP_OK;}
 esp_err_t bsp_audio_set_format(uint32_t hz,uint8_t bits,uint8_t ch){assert(hz==16000 && bits==16 && ch==1);return sleeping ? ESP_ERR_INVALID_STATE : ESP_OK;}
 void bsp_audio_set_volume(uint8_t v){assert(!sleeping && v<=100);applied_volume=v;}
-esp_err_t bsp_audio_write(const void *p,size_t n){assert(!sleeping && p && n==640);++writes;if(change_volume){app_speech_set_volume(25);change_volume=false;}if(interrupt_write)app_speech_stop();return ESP_OK;}
+esp_err_t bsp_audio_write(const void *p,size_t n){assert(!sleeping && p && n==640);++writes;if(change_volume){app_speech_set_volume(25);change_volume=false;}if(interrupt_write)app_speech_stop();if(disable_write)app_speech_set_enabled(false);return ESP_OK;}
 esp_err_t bsp_audio_sleep(void){sleeping=true;++sleeps;return ESP_OK;}
+esp_err_t bsp_audio_release(void){return bsp_audio_sleep();}
 esp_tts_voice_t *esp_tts_voice_set_init(const esp_tts_voice_t *t,void *d){assert(t==&esp_tts_voice_template && d==(void *)voice_data);return &fake_voice;}
 void esp_tts_voice_set_free(esp_tts_voice_t *v){assert(v==&fake_voice);}
 esp_tts_handle_t esp_tts_create(esp_tts_voice_t *v){assert(v==&fake_voice);++creates;return v;}
@@ -58,6 +59,9 @@ int main(void){
  before=parses;interrupt_write=true;unsigned epoch=cancel_epoch;
  assert(speak(long_text,epoch)==ESP_OK&&parses==before+1);interrupt_write=false;
  assert(!model.pending);
+ before=parses;disable_write=true;epoch=cancel_epoch;
+ assert(speak(long_text,epoch)==ESP_OK&&parses==before+1&&cancelled(epoch)&&!view.enabled);
+ disable_write=false;app_speech_set_enabled(true);
  assert(app_speech_start());
  assert(app_speech_capture_acquire());assert(!app_speech_capture_acquire());
  assert(!app_speech_say("三比二"));app_speech_capture_release();
@@ -65,5 +69,13 @@ int main(void){
  app_speech_stop();assert(app_speech_capture_acquire());app_speech_capture_release();
  view.state=SPEECH_PLAYING;assert(!app_speech_capture_acquire());
  view.state=SPEECH_STOPPING;assert(!app_speech_capture_acquire());
+ // Master off cancels active and pending work, refuses new speech, keeps volume.
+ view.state=SPEECH_PLAYING;assert(app_speech_say("二比一"));
+ unsigned previous_epoch=cancel_epoch;app_speech_set_enabled(false);
+ assert(!view.enabled&&!model.pending&&!view.pending&&view.state==SPEECH_STOPPING&&cancel_epoch!=previous_epoch);
+ assert(!app_speech_say("三比一")&&cancelled(previous_epoch)&&view.volume==APP_VOLUME_DEFAULT);
+ view.state=SPEECH_IDLE;assert(app_speech_capture_acquire());app_speech_capture_release();
+ app_speech_set_enabled(true);assert(view.enabled&&!model.pending&&app_speech_say("三比一"));
+ app_speech_stop();
  puts("Speech sleeping-codec playback, replay, wake failure and recovery: PASS");
 }

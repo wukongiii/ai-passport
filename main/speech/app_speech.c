@@ -13,7 +13,7 @@ static const char *TAG="app_speech";
 static portMUX_TYPE lock=portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t worker;
 static speech_model_t model;
-static app_speech_snapshot_t view={.volume=APP_VOLUME_DEFAULT};
+static app_speech_snapshot_t view={.volume=APP_VOLUME_DEFAULT,.enabled=true};
 static unsigned cancel_epoch;
 static bool capture_owned;
 extern const unsigned char voice_data[] asm("_binary_esp_tts_voice_data_xiaoxin_small_dat_start");
@@ -74,7 +74,7 @@ static esp_err_t speak(const char *text,unsigned epoch){
     if(voice)esp_tts_voice_set_free(voice);
     // Drain the short DMA tail; a stop may discard it. No UI references here.
     if(!cancelled(epoch) && error==ESP_OK)vTaskDelay(pdMS_TO_TICKS(100));
-    esp_err_t sleep=bsp_audio_sleep();if(error==ESP_OK)error=sleep;
+    esp_err_t sleep=bsp_audio_release();if(error==ESP_OK)error=sleep;
     return error;
 }
 static void run(void *arg){
@@ -105,7 +105,7 @@ bool app_speech_start(void){
 }
 bool app_speech_say(const char *text){
     if(!worker)return false;
-    portENTER_CRITICAL(&lock);bool ok=!capture_owned && speech_model_submit(&model,text,(uint64_t)esp_timer_get_time()/1000);
+    portENTER_CRITICAL(&lock);bool ok=view.enabled && !capture_owned && speech_model_submit(&model,text,(uint64_t)esp_timer_get_time()/1000);
     if(ok){view.pending=true;if(view.state!=SPEECH_PLAYING && view.state!=SPEECH_STOPPING)view.state=SPEECH_WAITING;view.error=0;++view.revision;}
     portEXIT_CRITICAL(&lock);if(ok)xTaskNotifyGive(worker);return ok;
 }
@@ -113,6 +113,17 @@ void app_speech_stop(void){
     portENTER_CRITICAL(&lock);speech_model_cancel(&model);++cancel_epoch;view.pending=false;
     view.state=view.state==SPEECH_PLAYING || view.state==SPEECH_STOPPING ? SPEECH_STOPPING : SPEECH_IDLE;view.error=0;++view.revision;
     portEXIT_CRITICAL(&lock);if(worker)xTaskNotifyGive(worker);
+}
+void app_speech_set_enabled(bool enabled){
+    bool changed=false;
+    portENTER_CRITICAL(&lock);
+    if(view.enabled!=enabled){
+        view.enabled=enabled;changed=true;
+        if(!enabled){speech_model_cancel(&model);++cancel_epoch;view.pending=false;
+            view.state=view.state==SPEECH_PLAYING || view.state==SPEECH_STOPPING ? SPEECH_STOPPING : SPEECH_IDLE;view.error=0;}
+        ++view.revision;
+    }
+    portEXIT_CRITICAL(&lock);if(changed && worker)xTaskNotifyGive(worker);
 }
 void app_speech_set_volume(unsigned percent){
     if(percent>100)percent=100;

@@ -23,7 +23,8 @@ typedef enum {
 } ai_game_result_t;
 /* Owner-task only; instructions have static lifetime. Snapshot context/tools are
  * immutable copies. stamp must include every change affecting interpretation.
- * Reserved common tool ask_clarification({question}) never calls game execute. */
+ * Accepted game tools own their local feedback, so transports must not speak
+ * their result a second time. Reserved common tool ask_clarification({question}) never calls game execute. */
 typedef struct { const char *instructions,*tools; } ai_game_definition_t;
 typedef struct {
     bool (*snapshot)(void *,ai_game_snapshot_t *);
