@@ -420,11 +420,17 @@ ranges as the device. A nearby-network selector is now provided as described bel
 Changes apply through the existing settings owner and persistence retry path.
 A successful HTTP submission acknowledges receipt, not durable saving. The page
 shows connection state, IP and device errors. A successful station association
-and DHCP address are required before replacing saved credentials; a wrong
-password leaves the previous network record untouched. Up to three delayed
+and DHCP address are required before saving credentials; a wrong
+password leaves all saved network records untouched. Up to three delayed
 retries use 2/4/6-second intervals; individual attempts time out after 20 seconds.
-Boot reconnects to saved credentials. The network page provides Retry and
-confirmed Forget. Forget erases only the application's station record.
+Up to 10 SSID/password pairs are retained in an insertion-order ring. An existing
+SSID updates its password in place; a new SSID overwrites the oldest insertion
+only when all 10 slots are occupied. Failed writes do not publish the replacement
+in RAM. Boot and Retry use the last successfully saved connection. Both the
+device and phone provide a saved-network selector without returning passwords.
+The existing single-network record is imported when no history exists. Confirmed
+Clear Saved Networks writes an explicit empty history so imported data cannot
+reappear. Unchanged reconnects avoid redundant writes.
 
 `main/network` isolates form/credential/DNS/timing policy from the Wi-Fi worker.
 Button handlers enqueue requests. Wi-Fi events enqueue bounded records; only
@@ -728,21 +734,28 @@ playback/replay remains Unverified pending user-triggered listening.
 
 ## Unified model configuration
 
-AI / Voice offers one generic model configuration entry and the offline listening
-entry. Left/right choose and middle opens; middle hold returns one level.
+AI / Voice opens a list containing hotspot setup, saved named models and offline
+listening. The hotspot entry works even with no saved model. Up to four profiles
+can be stored; left/right scroll the list and middle opens the focused entry.
+From model details, right activates that model. Left/right choose and middle opens; middle hold returns one level.
 There are no provider presets, account links, platform placeholders or separate
 ASR credentials. Model settings remain separate from general application settings.
 
-The phone form accepts the service's Model ID (up to 96 printable ASCII bytes),
+The phone form selects a profile or an empty slot and accepts a custom name
+(up to 12 supported characters / 36 UTF-8 bytes), the service's Model ID (up to 96 printable ASCII bytes),
 full API URL (up to 256 bytes) and API Key (up to 256 bytes). Model identifiers may
 contain slashes and colons. The URL must include the complete request path;
 HTTP(S) is supported without redirects, query strings or URL credentials.
 HTTPS uses the ESP-IDF root certificate bundle. HTTP sends credentials and audio
 in clear text. Saving activates the model; a blank Key retains the saved Key.
-Deleting the Key disables the model while keeping the Model ID and URL editable.
+Deleting a model clears that entire slot and disables it if active. Other profiles
+remain intact. Names support printable ASCII, CJK U+4E00..U+9FEF and common CJK
+punctuation using the existing network font; emoji and unsupported scripts are
+rejected. Each profile keeps its own Key; a blank Key only retains that slot's Key.
 Keys are never returned in snapshots, UI or HTTP responses.
 
-From the device model page, left opens phone setup, middle starts detection and
+From the AI / Voice list, hotspot setup directly opens phone provisioning.
+From a device model page, left also opens phone setup, middle starts detection and
 right activates a saved inactive configuration. The first QR joins the temporary
 password-free hotspot; middle switches to `http://192.168.4.1/#ai`.
 The device shows the same saved Model ID, full scrolling URL, capability stages
@@ -751,9 +764,12 @@ if another client changes configuration, the form requires an explicit reload.
 
 `main/ai/ai_config` validates the form and implements pure save/select/remove
 transitions. `ai_config_store` serializes one bounded request through the network
-worker, outside button/LVGL callbacks. New settings use `ai_voice/connection`:
-`AI`, version 1, active byte, then fixed Key/Model ID/URL byte arrays of
-257/97/257 bytes. Old model records are ignored, with no migration or compatibility
+worker, outside button/LVGL callbacks. New settings use `ai_voice/profiles`: `AI`, version 1, active byte, then four
+fixed name/Key/Model ID/URL byte arrays of 37/257/97/257 bytes per profile.
+The network worker allocates bounded serialization scratch only during reads
+and writes, then clears and frees it. Voice/probe code reads a small runtime
+snapshot rather than retaining the full public configuration list. The portal selects slots explicitly and both UIs display the same
+profile names, fields, current selection and per-profile detection results. Old model records are ignored, with no migration or compatibility
 branches. Users must re-enter AI settings; Wi-Fi, match records and player names
 are unaffected. Failed writes/commits retain the active configuration. The phone
 waits for durable completion before reporting success.
@@ -776,8 +792,10 @@ the live game's executor. It uploads no microphone recording and changes no scor
 There are up to three small API requests, which may incur service charges.
 A pass verifies this sample only, not universal recognition or model compatibility.
 
-Configuration changes invalidate results and in-flight replies using a separate
-generation counter; ordinary status polling does not invalidate game sessions.
+Editing or deleting a profile invalidates its detection result; selecting another
+profile preserves completed results. A global generation counter invalidates any
+in-flight game/probe request when settings change. Only one probe runs at a time.
+Ordinary status polling does not invalidate game sessions.
 Detection results are RAM-only and reset after reboot. Both UIs distinguish queued,
 text/tools/audio checking, pass, failure and stale states, including authorization,
 URL/model, rate-limit, network, memory, timeout and invalid-response reasons.
@@ -804,6 +822,37 @@ flashing and hash verification passed, preserving NVS regions. The bounded
 15-second serial window captured no bytes, so startup is unverified. Device tests
 PASS applies only to writing/hash verification; screen/buttons, real-hotspot
 save/restart, actual model calls and RAM/stack peaks remain unverified.
+
+Named profiles validation, 2026-10-30: complete gate Build PASS / Host tests PASS.
+Focused voice/probe ASan/UBSan tests passed. Tests cover separate keys, restart,
+switch/remove behavior, stale in-flight probes, and routing voice to a nonzero
+profile slot. Simulated-API browser checks cover two named profiles, automatic
+checks, current-model selection, removal isolation and 390 px layout. Real-LVGL
+previews cover the direct hotspot entry, multi-model list and selecting the second
+model in both rotations (24792-byte peak). Actual RF provisioning, persistence,
+model calls, audio and board memory peaks still require device acceptance.
+Verified archive/full SHA-256: `build/firmware/ccc5bbe3f33d2a8f567501c0d0c1e7b87c82971f54bb5e415e17070dcbcfc377/`.
+Matching ELF SHA-256: `4dc0e7542f250909b8aedebb7193e3a9d90bfcf832819e8c113fa6507f3d1ac0`.
+
+The matching device partition table was checked. Segmented flashing and Flash
+hash verification passed while preserving NVS. A 12-second startup capture was
+empty; boot, screen, buttons and live model checks remain unverified.
+
+The named-model page uses the network font's actual 27 px line height. Its
+single-line status labels have 28 px height and model rows retain at least 27 px
+of text space after padding. A circular label with a shorter content box starts
+LVGL vertical scrolling even when the text fits horizontally. Timed real-LVGL
+regression checks verify that the idle list remains pixel-identical after one
+second and a UI refresh, then exercise selection, entry and return in both
+landscape orientations; screenshots alone do not validate animation behavior.
+
+Vertical-scroll correction validation, 2026-10-30: the pre-fix real-LVGL check
+reproduced a 20 px content box against the 27 px font line height. The correction
+passes timed idle-frame equality and input navigation in both rotations, plus
+the complete Build / Host tests gate. Verified archive/full SHA-256:
+`build/firmware/1b8fef2aea14ee15e4845f8b0067122d83ca9d0dd09a31f0fb9da899aca133d3/`.
+Matching ELF SHA-256: `23c4bb00312e4160afe7ba7d3614f73008ef9b4c1ed650f367aaff019c7496a4`.
+On-board rendering and physical input still require user acceptance.
 
 ## Per-game phone configuration
 
@@ -1027,3 +1076,18 @@ PASS; Device tests NOT RUN. No flashing or NVS changes were performed.
 Verified archive/full-image SHA-256:
 `build/firmware/25dbd1889d0c1e3872ab1ed742fb3b2cf7860bcf3d7424937ed4f87a7b4a7b24/`.
 Matching ELF SHA-256: `751314bf7ab8218b3afcd88357e149571fd7494d4f12a96d9687f621c954a896`.
+
+## Local speech memory admission
+
+A device playback failure with code 257 (`ESP_ERR_NO_MEM`) was traced to the
+pre-synthesis admission check: free heap 51104 bytes, largest block 43008 bytes,
+below the existing 70000-byte total-heap requirement. This is local TTS and does
+not make a model request. Keep both admission limits unchanged. Capability-test
+workspaces, game voice job snapshots, command/result JSON parsers and HTTP model
+snapshots now allocate only while in use and release on completion or failure.
+Cancelled game jobs retain their snapshot until the worker acknowledges completion.
+Allocation failure rejects a command before score dispatch. Host checks cover
+low-memory rejection, job allocation failure, cancellation cleanup and probe
+allocation failure. After the corrected firmware was flashed with NVS preserved,
+the user confirmed successful local playback with audible sound on 2026-10-30.
+Concurrent model/network operation and peak runtime heap remain unverified.

@@ -30,3 +30,17 @@ typedef struct {
 void app_net_scan_add(app_net_scan_t *,const app_net_access_point_t *);
 typedef enum { APP_NET_ISSUE_GENERAL,APP_NET_ISSUE_AUTH,APP_NET_ISSUE_MISSING,APP_NET_ISSUE_SECURITY } app_net_issue_t;
 app_net_issue_t app_net_issue(unsigned reason);
+
+/* Insertion-order ring; selecting a saved SSID changes only the preferred slot.
+ * Public snapshots deliberately omit passwords. */
+enum { APP_NET_SAVED_MAX=10, APP_NET_HISTORY_VERSION=1 };
+typedef struct {
+    uint8_t version,count,next,preferred;
+    app_net_credentials_t entries[APP_NET_SAVED_MAX];
+} app_net_history_t;
+typedef struct { char ssids[APP_NET_SAVED_MAX][33]; unsigned count,revision; } app_net_saved_t;
+void app_net_history_init(app_net_history_t *);
+bool app_net_history_valid(const app_net_history_t *);
+int app_net_history_find(const app_net_history_t *,const char *ssid);
+bool app_net_history_remember(app_net_history_t *,const app_net_credentials_t *);
+void app_net_history_list(const app_net_history_t *,app_net_saved_t *);

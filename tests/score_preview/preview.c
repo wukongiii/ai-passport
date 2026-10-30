@@ -38,6 +38,9 @@ void app_network_scan_snapshot(app_net_scan_t *out){*out=scan_preview;}
 bool app_network_scan(void){scan_preview.scanning=false;scan_preview.attempted=true;scan_preview.count=2;scan_preview.revision++;
     snprintf(scan_preview.entries[0].ssid,33,"台球室网络");scan_preview.entries[0].secured=true;scan_preview.entries[0].rssi=-42;
     snprintf(scan_preview.entries[1].ssid,33,"Guest");scan_preview.entries[1].secured=false;scan_preview.entries[1].rssi=-65;return true;}
+static app_net_saved_t saved_preview={.ssids={"台球室","Home","Guest"},.count=3,.revision=1};
+void app_network_saved_snapshot(app_net_saved_t *out){*out=saved_preview;}
+bool app_network_connect_saved(const char *ssid){return ssid && *ssid;}
 bool app_network_connect(const app_net_credentials_t *c){(void)c;return true;}
 
 void app_network_publish_preferences(const app_preferences_t *p){(void)p;}
@@ -49,7 +52,7 @@ void app_speech_stop(void){speech_preview.state=SPEECH_IDLE;speech_preview.pendi
 void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_preview;}
 static ai_config_snapshot_t ai_preview={.ready=true,.active=AI_PROVIDER_NONE};
 static ai_check_snapshot_t check_preview={.provider=AI_PROVIDER_NONE};
-void ai_check_snapshot(ai_check_snapshot_t *out){*out=check_preview;}
+void ai_check_snapshot(unsigned provider,ai_check_snapshot_t *out){*out=check_preview;out->provider=provider;}
 bool ai_check_request(unsigned p){check_preview.provider=p;check_preview.state=AI_CHECK_QUEUED;++check_preview.revision;return true;}
 void ai_config_snapshot(ai_config_snapshot_t *out){*out=ai_preview;}
 bool ai_config_submit(const ai_config_request_t *r,unsigned *id){(void)id;ai_preview.active=r->provider;ai_preview.revision++;return true;}
@@ -83,6 +86,22 @@ static void capture(const char *name) {
 }
 static void advance(unsigned ms) {
     for (unsigned t=0; t<ms; t+=20) { lv_tick_inc(20); lv_timer_handler(); }
+}
+/* A one-line circular label must never fall back to vertical scrolling. */
+static void assert_horizontal_labels(lv_obj_t *root){
+    if(lv_obj_check_type(root,&lv_label_class) && lv_label_get_long_mode(root)==LV_LABEL_LONG_SCROLL_CIRCULAR){
+        const lv_font_t *font=lv_obj_get_style_text_font(root,LV_PART_MAIN);
+        if(lv_obj_get_content_height(root)<lv_font_get_line_height(font)){
+            fprintf(stderr,"Vertical-scroll regression: label '%s', content=%ld font=%u\n",lv_label_get_text(root),(long)lv_obj_get_content_height(root),(unsigned)lv_font_get_line_height(font));
+            abort();
+        }
+    }
+    for(unsigned i=0;i<lv_obj_get_child_count(root);++i)assert_horizontal_labels(lv_obj_get_child(root,i));
+}
+static void assert_idle_frame(app_container_t *app,const char *name){
+    lv_obj_update_layout(lv_screen_active());assert_horizontal_labels(lv_screen_active());
+    unsigned char *before=malloc(sizeof(frame));assert(before);memcpy(before,frame,sizeof(frame));
+    advance(1000);app_container_tick(app,1000000);app_ui_render(app,91,"");capture(name);assert(!memcmp(before,frame,sizeof(frame)));free(before);
 }
 int main(void) {
     game_preferences_default(&game_names.eight);
@@ -158,18 +177,24 @@ int main(void) {
     for(unsigned r=0;r<2;++r){
         app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=4;
         ai_preview=(ai_config_snapshot_t){.ready=true,.active=AI_PROVIDER_NONE,.revision=ai_preview.revision+1};
-        strcpy(ai_preview.model,"test-audio-model");strcpy(ai_preview.url,"https://example.com/v1/chat/completions");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-empty-90" : "ai-empty-270");
-        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-provider-90" : "ai-provider-270");
-        app_container_input(&app,0,APP_GESTURE_SHORT);snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-862C");
+        app_container_input(&app,1,APP_GESTURE_SHORT);assert(net_preview.portal);snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-862C");
         app_container_tick(&app,100);app_ui_render(&app,91,"");capture(r ? "ai-hotspot-90" : "ai-hotspot-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-phone-90" : "ai-phone-270");
-        ai_preview.configured[0]=true;ai_preview.active=0;++ai_preview.revision;app_container_tick(&app,200);
-        app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");capture(r ? "ai-saved-90" : "ai-saved-270");
+        ai_preview.configured[0]=true;ai_preview.active=0;strcpy(ai_preview.entries[0].name,"日常记分");
+        strcpy(ai_preview.entries[0].model,"test-audio-model");strcpy(ai_preview.entries[0].url,"https://example.com/v1/chat/completions");
+        ai_preview.configured[2]=true;strcpy(ai_preview.entries[2].name,"备用模型");strcpy(ai_preview.entries[2].model,"other-model");
+        strcpy(ai_preview.entries[2].url,"https://other.example/api");++ai_preview.revision;app_container_tick(&app,200);
+        app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");capture(r ? "ai-model-list-90" : "ai-model-list-270");
+        assert_idle_frame(&app,r ? "ai-model-list-idle-90" : "ai-model-list-idle-270");
+        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-saved-90" : "ai-saved-270");
+        lv_obj_update_layout(lv_screen_active());assert_horizontal_labels(lv_screen_active());
         check_preview=(ai_check_snapshot_t){.provider=0,.state=AI_CHECK_PASS,.text=true,.tools=true,.audio=true,.revision=check_preview.revision+1};
         app_container_tick(&app,210);app_ui_render(&app,91,"");capture(r ? "ai-check-pass-90" : "ai-check-pass-270");
         check_preview.state=AI_CHECK_FAILED;check_preview.audio=false;check_preview.error=401;++check_preview.revision;app_container_tick(&app,220);app_ui_render(&app,91,"");capture(r ? "ai-check-fail-90" : "ai-check-fail-270");
         check_preview=(ai_check_snapshot_t){.provider=AI_PROVIDER_NONE,.revision=check_preview.revision+1};
+        app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
+        app_container_input(&app,2,APP_GESTURE_SHORT);assert(ai_preview.active==2);app_ui_render(&app,91,"");capture(r ? "ai-selected-second-90" : "ai-selected-second-270");
         app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r ? "voice-ready-90" : "voice-ready-270");
@@ -286,7 +311,12 @@ int main(void) {
         app_container_input(&app,1,APP_GESTURE_LONG);
         for(unsigned i=0;i<3;++i)app_container_input(&app,2,APP_GESTURE_SHORT);
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-forget-90" : "network-forget-270");
-        app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);
+        app_container_input(&app,0,APP_GESTURE_SHORT); // Cancel clear -> menu.
+        app_container_tick(&app,2700000);
+        app_container_input(&app,0,APP_GESTURE_SHORT); // Wrap to saved networks.
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-saved-90" : "network-saved-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "network-saved-confirm-90" : "network-saved-confirm-270");
+        app_container_input(&app,0,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_LONG);app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,1,APP_GESTURE_LONG);net_preview.portal=false;net_preview.state=APP_NET_OFFLINE;net_preview.associated=false;net_preview.reason=0;net_preview.error=0;net_preview.revision++;
     }
     // The lab is a host-only fixture, never registered in the production hall.

@@ -10,8 +10,9 @@ static esp_tts_voice_t fake_voice;
 static bool sleeping=true;
 static int wakes,writes,sleeps,phase,creates,destroys;
 static esp_err_t wake_error;
-size_t esp_get_free_heap_size(void){return 100000;}
-size_t heap_caps_get_largest_free_block(unsigned c){(void)c;return 90000;}
+static size_t free_heap=100000,largest_block=90000;
+size_t esp_get_free_heap_size(void){return free_heap;}
+size_t heap_caps_get_largest_free_block(unsigned c){(void)c;return largest_block;}
 int64_t esp_timer_get_time(void){return 1000000;}
 void vTaskDelay(TickType_t t){(void)t;}
 unsigned uxTaskGetStackHighWaterMark(TaskHandle_t t){(void)t;return 4000;}
@@ -33,6 +34,9 @@ void esp_tts_stream_reset(esp_tts_handle_t t){assert(t);}
 void esp_tts_destroy(esp_tts_handle_t t){assert(t);++destroys;}
 int main(void){
  assert(sleeping);
+ free_heap=51104;largest_block=43008;assert(speak("三比二",0)==ESP_ERR_NO_MEM&&wakes==0&&creates==0);
+ free_heap=100000;largest_block=39999;assert(speak("三比二",0)==ESP_ERR_NO_MEM&&wakes==0&&creates==0);
+ largest_block=90000;
  assert(speak("三比二",0)==ESP_OK);assert(sleeping && wakes==1 && writes==1 && sleeps==1);
  assert(speak("四比二",0)==ESP_OK);assert(sleeping && wakes==2 && writes==2 && sleeps==2);
  assert(creates==2 && destroys==2);

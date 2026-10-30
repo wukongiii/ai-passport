@@ -99,3 +99,33 @@ app_net_issue_t app_net_issue(unsigned reason){
     if(reason==210 || reason==211)return APP_NET_ISSUE_SECURITY;
     return APP_NET_ISSUE_GENERAL;
 }
+
+void app_net_history_init(app_net_history_t *h){memset(h,0,sizeof(*h));h->version=APP_NET_HISTORY_VERSION;}
+bool app_net_history_valid(const app_net_history_t *h){
+    if(!h || h->version!=APP_NET_HISTORY_VERSION || h->count>APP_NET_SAVED_MAX ||
+       h->next>=APP_NET_SAVED_MAX || (h->count && h->preferred>=h->count) ||
+       (!h->count && h->preferred) || (h->count<APP_NET_SAVED_MAX && h->next!=h->count))return false;
+    for(unsigned i=0;i<h->count;++i){
+        if(!app_net_credentials_valid(&h->entries[i]))return false;
+        for(unsigned j=0;j<i;++j)if(!strcmp(h->entries[i].ssid,h->entries[j].ssid))return false;
+    }return true;
+}
+int app_net_history_find(const app_net_history_t *h,const char *ssid){
+    if(!ssid)return -1;
+    for(unsigned i=0;i<h->count;++i)if(!strcmp(h->entries[i].ssid,ssid))return (int)i;
+    return -1;
+}
+bool app_net_history_remember(app_net_history_t *h,const app_net_credentials_t *c){
+    if(!app_net_history_valid(h)||!app_net_credentials_valid(c))return false;
+    int found=app_net_history_find(h,c->ssid);unsigned slot=found<0 ? h->next : (unsigned)found;
+    h->entries[slot]=*c;h->preferred=(uint8_t)slot;
+    if(found<0){if(h->count<APP_NET_SAVED_MAX)++h->count;h->next=(uint8_t)((slot+1)%APP_NET_SAVED_MAX);}
+    return true;
+}
+void app_net_history_list(const app_net_history_t *h,app_net_saved_t *out){
+    memset(out,0,sizeof(*out));out->count=h->count;
+    for(unsigned i=0;i<h->count;++i){
+        unsigned slot=(h->next+APP_NET_SAVED_MAX-1-i)%APP_NET_SAVED_MAX;
+        memcpy(out->ssids[i],h->entries[slot].ssid,sizeof(out->ssids[i]));
+    }
+}

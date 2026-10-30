@@ -13,11 +13,18 @@ void net_setup_update(net_setup_t *s,const app_net_scan_t *scan){
         if(s->focus>s->scan.count+1 && s->page==NET_SETUP_LIST)s->focus=0;
     }
 }
-static const char *const menu[]={TXT_APP_NET_SELECT,TXT_APP_NET_PHONE,TXT_APP_NETWORK_RETRY,TXT_APP_NETWORK_FORGET};
+static const char *const menu[]={TXT_APP_NET_SELECT,TXT_APP_NET_PHONE,TXT_APP_NETWORK_RETRY,TXT_APP_NETWORK_FORGET,TXT_APP_NET_SAVED_LIST};
 const char *net_setup_item(const net_setup_t *s,unsigned item){
-    if(s->page==NET_SETUP_MENU)return item<4 ? menu[item] : "";
+    if(s->page==NET_SETUP_MENU)return item<5 ? menu[item] : "";
+    if(s->page==NET_SETUP_SAVED)return item<s->saved.count ? s->saved.ssids[item] : "";
     if(item<s->scan.count)return s->scan.entries[item].ssid;
     return item==s->scan.count ? TXT_APP_NET_MANUAL : TXT_APP_NET_RESCAN;
+}
+void net_setup_update_saved(net_setup_t *s,const app_net_saved_t *saved){
+    if(saved->revision==s->saved.revision)return;
+    char selected[33]={0};if(s->page==NET_SETUP_SAVED && s->focus<s->saved.count)strcpy(selected,s->saved.ssids[s->focus]);
+    s->saved=*saved;
+    if(s->page==NET_SETUP_SAVED){s->focus=0;for(unsigned i=0;i<saved->count;++i)if(!strcmp(selected,saved->ssids[i]))s->focus=i;}
 }
 void net_setup_bindings(const net_setup_t *s,const app_network_snapshot_t *n,app_bindings_t *b){
     app_actions_clear(b);
@@ -27,6 +34,7 @@ void net_setup_bindings(const net_setup_t *s,const app_network_snapshot_t *n,app
     bool enabled=!n->busy;
     if(s->page==NET_SETUP_MENU){enabled=n->ready && (s->focus==1 || !n->busy);if(s->focus>=2)enabled=enabled && n->saved;}
     if(s->page==NET_SETUP_LIST && s->scan.scanning)enabled=false;
+    if(s->page==NET_SETUP_SAVED && !s->saved.count)enabled=false;
     app_actions_register(b,1,APP_GESTURE_SHORT,101,confirmation ? TXT_APP_CONFIRM : TXT_APP_ENTER,enabled,APP_ACTION_CONFIRM);
     app_actions_register(b,2,APP_GESTURE_SHORT,102,confirmation ? TXT_APP_BACK : TXT_APP_NEXT,true,confirmation ? APP_ACTION_BACK : APP_ACTION_NAVIGATE);
     app_actions_register(b,1,APP_GESTURE_LONG,103,TXT_APP_BACK,true,APP_ACTION_BACK);
@@ -39,7 +47,7 @@ net_setup_effect_t net_setup_input(net_setup_t *s,const app_network_snapshot_t *
     app_bindings_t b;net_setup_bindings(s,n,&b);if(!app_actions_resolve(&b,slot,gesture))return NET_SETUP_NONE;
     if(s->page==NET_SETUP_SSID || s->page==NET_SETUP_PASSWORD){
         text_input_gesture(&s->editor,slot,gesture,s->now);
-        if(s->editor.page==TEXT_INPUT_CANCELLED){text_input_dispose(&s->editor);memset(&s->credentials,0,sizeof(s->credentials));s->page=NET_SETUP_LIST;s->focus=0;}
+        if(s->editor.page==TEXT_INPUT_CANCELLED){text_input_dispose(&s->editor);memset(&s->credentials,0,sizeof(s->credentials));s->page=s->saved_choice ? NET_SETUP_SAVED : NET_SETUP_LIST;s->focus=0;s->saved_choice=false;}
         else if(s->editor.page==TEXT_INPUT_DONE){
             if(s->page==NET_SETUP_SSID){
                 if(!s->editor.length){s->editor.page=TEXT_INPUT_CHARACTERS;s->input_error=true;return NET_SETUP_NONE;}
@@ -53,21 +61,27 @@ net_setup_effect_t net_setup_input(net_setup_t *s,const app_network_snapshot_t *
     }
     if((slot==1 && gesture==APP_GESTURE_LONG) || ((s->page==NET_SETUP_CONFIRM || s->page==NET_SETUP_FORGET) && slot!=1)){
         if(s->page==NET_SETUP_MENU)return NET_SETUP_EXIT;
-        if(s->page==NET_SETUP_CONFIRM){memset(&s->credentials,0,sizeof(s->credentials));s->page=NET_SETUP_LIST;s->focus=0;}
+        if(s->page==NET_SETUP_CONFIRM){memset(&s->credentials,0,sizeof(s->credentials));s->page=s->saved_choice ? NET_SETUP_SAVED : NET_SETUP_LIST;s->focus=0;s->saved_choice=false;}
         else{s->page=NET_SETUP_MENU;s->focus=0;}return NET_SETUP_NONE;
     }
     if(gesture!=APP_GESTURE_SHORT)return NET_SETUP_NONE;
-    if(slot!=1){unsigned count=s->page==NET_SETUP_MENU ? 4 : s->scan.count+2;s->focus=(s->focus+count+(slot==0 ? -1 : 1))%count;return NET_SETUP_NONE;}
+    if(slot!=1){unsigned count=s->page==NET_SETUP_MENU ? 5 : s->page==NET_SETUP_SAVED ? s->saved.count : s->scan.count+2;if(!count)return NET_SETUP_NONE;s->focus=(s->focus+count+(slot==0 ? -1 : 1))%count;return NET_SETUP_NONE;}
     if(s->page==NET_SETUP_MENU){
         switch(s->focus){
         case 0:s->page=NET_SETUP_LIST;s->focus=0;return NET_SETUP_SCAN;
         case 1:return NET_SETUP_PORTAL;
         case 2:return NET_SETUP_RETRY;
+        case 4:s->page=NET_SETUP_SAVED;s->focus=0;return NET_SETUP_NONE;
         default:s->page=NET_SETUP_FORGET;return NET_SETUP_NONE;
         }
     }
     if(s->page==NET_SETUP_FORGET){s->page=NET_SETUP_MENU;s->focus=0;return NET_SETUP_ERASE;}
-    if(s->page==NET_SETUP_CONFIRM){s->page=NET_SETUP_MENU;s->focus=0;return NET_SETUP_CONNECT;}
+    if(s->page==NET_SETUP_CONFIRM){s->page=NET_SETUP_MENU;s->focus=0;return s->saved_choice ? NET_SETUP_CONNECT_SAVED : NET_SETUP_CONNECT;}
+    if(s->page==NET_SETUP_SAVED){
+        memset(&s->credentials,0,sizeof(s->credentials));strcpy(s->credentials.ssid,s->saved.ssids[s->focus]);
+        s->saved_choice=true;s->page=NET_SETUP_CONFIRM;return NET_SETUP_NONE;
+    }
+    s->saved_choice=false;
     if(s->focus==s->scan.count+1){s->focus=0;return NET_SETUP_SCAN;}
     memset(&s->credentials,0,sizeof(s->credentials));
     if(s->focus==s->scan.count){begin_editor(s,false);return NET_SETUP_NONE;}

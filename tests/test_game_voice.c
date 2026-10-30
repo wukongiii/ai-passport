@@ -31,9 +31,10 @@ void vTaskDelay(TickType_t n){now+=(int64_t)n*1000;}
 unsigned ulTaskNotifyTake(int clear,TickType_t ticks){(void)clear;(void)ticks;return 0;}
 void xTaskNotifyGive(TaskHandle_t h){assert(h);}
 int xTaskCreate(void (*f)(void *),const char *name,unsigned size,void *a,unsigned p,TaskHandle_t *h){(void)f;(void)name;(void)size;(void)a;(void)p;*h=(void *)1;return pdPASS;}
-const ai_provider_t *ai_provider(unsigned p){static const ai_provider_t a={.id="compatible"};assert(p==0);return &a;}
+const ai_provider_t *ai_provider(unsigned p){static const ai_provider_t a={.id="compatible"};assert(p<AI_PROVIDER_COUNT);return &a;}
 void ai_config_snapshot(ai_config_snapshot_t *s){*s=cfg;}
-bool ai_config_connection(unsigned p,char *key,char *model,char *url,unsigned *gen){assert(p==0);strcpy(key,"test-only");strcpy(model,"test-model");strcpy(url,"https://example.com/v1/chat/completions");if(gen)*gen=cfg.generation;return true;}
+void ai_config_runtime(ai_runtime_snapshot_t *out){out->ready=cfg.ready;out->busy=cfg.busy;out->active=cfg.active;out->generation=cfg.generation;memcpy(out->configured,cfg.configured,sizeof(out->configured));}
+bool ai_config_connection(unsigned p,char *key,char *model,char *url,unsigned *gen){assert(p==cfg.active);strcpy(key,"test-only");strcpy(model,"test-model");strcpy(url,"https://example.com/v1/chat/completions");if(gen)*gen=cfg.generation;return true;}
 bool ai_check_take(unsigned *p,unsigned *g){(void)p;(void)g;return false;}
 void ai_probe_run(unsigned p,unsigned g){(void)p;(void)g;}
 void app_network_snapshot(app_network_snapshot_t *s){*s=net;}
@@ -65,7 +66,7 @@ int esp_http_client_read(void *c,char *p,int n){assert(c);if(++read_attempts==1)
 bool esp_http_client_is_complete_data_received(void *c){assert(c);return true;}
 esp_err_t esp_http_client_cleanup(void *c){assert(c);++closes;return ESP_OK;}
 static void begin_job(void){reads=0;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(view.state==GAME_VOICE_STARTING&&occupied);}
-static void drain(void){app_game_voice_tick(target,now);assert(!occupied&&!session.pending&&!lease_owned);}
+static void drain(void){app_game_voice_tick(target,now);assert(!occupied&&!session.pending&&!lease_owned&&!job);}
 static void codec_tests(void){
  uint8_t encoded[VOICE_CAPACITY+1]={0},header[44];voice_adpcm_t enc={0},dec={0};int16_t pcm[16000];
  for(unsigned i=0;i<16000;++i)pcm[i]=(int16_t)(5000*sin(i*0.12));
@@ -84,6 +85,7 @@ int main(void){
  net.state=APP_NET_OFFLINE;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE)&&!occupied);net.state=APP_NET_CONNECTED;
  begin_job();b.actions[APP_GESTURE_LONG][1]=(app_action_hint_t){"hall",true,1,APP_ACTION_BACK};app_game_voice_bindings(target,&b);assert(b.actions[APP_GESTURE_LONG][1].id==64002);process_job();assert(completed&&occupied);unsigned seq=session.sequence;
  assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE)&&session.sequence==seq);drain();assert(executes==1&&spoken==1&&headers==3&&read_attempts==3&&strstr(first,"input_audio"));
+ cfg.active=2;cfg.configured[2]=true;begin_job();assert(provider==2);cancel_upload=true;process_job();drain();cancel_upload=false;cfg.active=0;
  // A manual score cancels even an already completed reply, before owner consumption.
  begin_job();process_job();assert(!app_game_voice_input(target,0,APP_GESTURE_SHORT));drain();assert(executes==1);
  begin_job();assert(app_game_voice_input(target,1,APP_GESTURE_LONG));process_job();drain();assert(view.state==GAME_VOICE_IDLE&&executes==1);
@@ -91,7 +93,8 @@ int main(void){
  begin_job();process_job();++cfg.generation;drain();assert(executes==1); // model change race
  begin_job();process_job();++target.activation;drain();assert(executes==1); // leave/reenter
  begin_job();process_job();now=session.deadline;drain();assert(executes==1);
- for(int allocation=1;allocation<=6;++allocation){fail_alloc=allocation;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR);}fail_alloc=0;
+ fail_alloc=1;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(!occupied&&!job&&!session.pending&&view.error==ESP_ERR_NO_MEM);
+ for(int allocation=2;allocation<=7;++allocation){fail_alloc=allocation;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR);}fail_alloc=0;
  audio_error=ESP_FAIL;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR);audio_error=ESP_OK;
  silent=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR&&!strcmp(view.text,TXT_GAME_VOICE_EMPTY));silent=false;
  cancel_during_read=true;begin_job();process_job();drain();assert(reads==1&&executes==1);cancel_during_read=false;

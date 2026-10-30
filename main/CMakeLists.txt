@@ -19,6 +19,7 @@ idf_component_register(
          "network/network_setup_ui.c"
          "../assets/fonts/network_font_14.c"
          "network/app_network_model.c"
+        "network/network_history_store.c"
          "app/app_container.c"
          "app/app_registry.c"
          "app/app_ui.c"

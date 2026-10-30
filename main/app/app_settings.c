@@ -76,6 +76,11 @@ static app_module_effect_t input(void *c, app_rotation_t rotation, unsigned slot
         case NET_SETUP_PORTAL:state.queue_error=!app_network_portal(!state.network.portal);break;
         case NET_SETUP_RETRY:state.queue_error=!app_network_retry();break;
         case NET_SETUP_ERASE:state.queue_error=!app_network_forget();break;
+        case NET_SETUP_CONNECT_SAVED:
+            state.queue_error=!app_network_connect_saved(state.setup.credentials.ssid);
+            if(state.queue_error)state.setup.page=NET_SETUP_CONFIRM;
+            else memset(&state.setup.credentials,0,sizeof(state.setup.credentials));
+            break;
         case NET_SETUP_CONNECT:
             state.queue_error=!app_network_connect(&state.setup.credentials);
             if(state.queue_error)state.setup.page=NET_SETUP_CONFIRM;
@@ -97,6 +102,8 @@ static bool tick(void *c, int64_t now) {
     if(state.network_page){
         app_net_scan_t scan;app_network_scan_snapshot(&scan);
         if(scan.revision!=state.setup.scan.revision){net_setup_update(&state.setup,&scan);changed=state.active;}
+        app_net_saved_t saved;app_network_saved_snapshot(&saved);
+        if(saved.revision!=state.setup.saved.revision){net_setup_update_saved(&state.setup,&saved);changed=state.active;}
         const text_input_t *t=&state.setup.editor;
         if(t->config.secret && !t->revealed && state.last_tick<t->reveal_until_ms && state.now>=t->reveal_until_ms)changed=true;
     }

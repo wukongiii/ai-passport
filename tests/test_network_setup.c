@@ -31,5 +31,15 @@ int main(void){
     s.focus=3;assert(press(&s,&n,1,APP_GESTURE_SHORT)==NET_SETUP_NONE);n.saved=true;
     press(&s,&n,1,APP_GESTURE_SHORT);assert(s.page==NET_SETUP_FORGET);
     assert(press(&s,&n,1,APP_GESTURE_SHORT)==NET_SETUP_ERASE);
+    app_net_saved_t saved={.ssids={"Home","台球室"},.count=2,.revision=1};
+    net_setup_update_saved(&s,&saved);s.focus=4;
+    assert(press(&s,&n,1,APP_GESTURE_SHORT)==NET_SETUP_NONE&&s.page==NET_SETUP_SAVED);
+    assert(!strcmp(net_setup_item(&s,0),"Home"));
+    press(&s,&n,1,APP_GESTURE_SHORT);assert(s.saved_choice&&s.page==NET_SETUP_CONFIRM&&!*s.credentials.password);
+    press(&s,&n,0,APP_GESTURE_SHORT);assert(s.page==NET_SETUP_SAVED&&!s.saved_choice);
+    press(&s,&n,2,APP_GESTURE_SHORT);press(&s,&n,1,APP_GESTURE_SHORT);
+    assert(press(&s,&n,1,APP_GESTURE_SHORT)==NET_SETUP_CONNECT_SAVED&&!strcmp(s.credentials.ssid,"台球室"));
+    s.page=NET_SETUP_SAVED;s.focus=1;saved.count=0;saved.revision++;net_setup_update_saved(&s,&saved);
+    press(&s,&n,2,APP_GESTURE_SHORT);assert(s.focus==0&&press(&s,&n,1,APP_GESTURE_SHORT)==NET_SETUP_NONE);
     net_setup_dispose(&s);puts("Device network selection, shared keyboard, validation, confirmation and secret cleanup: PASS");
 }

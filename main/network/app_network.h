@@ -17,6 +17,8 @@ bool app_network_retry(void);
 bool app_network_scan(void);
 void app_network_scan_snapshot(app_net_scan_t *);
 bool app_network_connect(const app_net_credentials_t *);
+bool app_network_connect_saved(const char *ssid);
+void app_network_saved_snapshot(app_net_saved_t *);
 /* UI owner publishes / applies settings; HTTP task never touches LVGL or NVS settings. */
 void app_network_publish_preferences(const app_preferences_t *);
 bool app_network_take_preferences(app_preferences_t *);

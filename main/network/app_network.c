@@ -1,4 +1,5 @@
 #include "app_network.h"
+#include "network_history_store.h"
 #include "app_network_socket.h"
 #include "../ai/ai_config.h"
 #include "../games/game_preferences.h"
@@ -21,11 +22,12 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
 
 static const char *TAG="app_network";
-typedef enum { CMD_PORTAL_ON,CMD_PORTAL_OFF,CMD_FORGET,CMD_RETRY,CMD_CONNECT,CMD_GOT_IP,CMD_DISCONNECTED,CMD_SCAN,CMD_SCAN_DONE,CMD_ASSOCIATED,CMD_CONNECT_DEVICE } command_type_t;
+typedef enum { CMD_PORTAL_ON,CMD_PORTAL_OFF,CMD_FORGET,CMD_RETRY,CMD_CONNECT,CMD_GOT_IP,CMD_DISCONNECTED,CMD_SCAN,CMD_SCAN_DONE,CMD_ASSOCIATED,CMD_CONNECT_DEVICE,CMD_CONNECT_SAVED } command_type_t;
 typedef struct {command_type_t type;app_net_credentials_t credentials;unsigned reason;uint32_t ip;} command_t;
 static QueueHandle_t commands;
 static portMUX_TYPE lock=portMUX_INITIALIZER_UNLOCKED;
@@ -40,6 +42,8 @@ static bool handler_wifi,handler_ip,wifi_initialized,wifi_started;
 static nvs_handle_t store;
 static bool store_ready,time_started,time_initialized;
 static app_net_credentials_t saved,candidate;
+static app_net_history_t history;
+static app_net_saved_t saved_view;
 static bool candidate_new,waiting_disconnect;
 static bool accepting_connect;
 static app_net_scan_t scan_view;
@@ -80,6 +84,24 @@ bool app_network_connect(const app_net_credentials_t *credentials){
     portEXIT_CRITICAL(&lock);
     if(ok && xQueueSend(commands,&c,0)!=pdTRUE){portENTER_CRITICAL(&lock);accepting_connect=false;portEXIT_CRITICAL(&lock);ok=false;}
     memset(&c,0,sizeof(c));return ok;
+}
+void app_network_saved_snapshot(app_net_saved_t *out){portENTER_CRITICAL(&lock);*out=saved_view;portEXIT_CRITICAL(&lock);}
+static void publish_saved(void){
+    app_net_saved_t next;app_net_history_list(&history,&next);
+    memset(&saved,0,sizeof(saved));if(history.count)saved=history.entries[history.preferred];
+    portENTER_CRITICAL(&lock);next.revision=saved_view.revision+1;saved_view=next;portEXIT_CRITICAL(&lock);
+}
+bool app_network_connect_saved(const char *ssid){
+    app_net_credentials_t c={0};
+    if(!ssid || strlen(ssid)>=sizeof(c.ssid))return false;
+    strcpy(c.ssid,ssid);if(!app_net_credentials_valid(&c))return false;
+    command_t request={.type=CMD_CONNECT_SAVED,.credentials=c};
+    portENTER_CRITICAL(&lock);bool known=false;
+    for(unsigned i=0;i<saved_view.count;++i)if(!strcmp(ssid,saved_view.ssids[i]))known=true;
+    bool ok=known && view.ready && !view.busy && !accepting_connect;if(ok)accepting_connect=true;
+    portEXIT_CRITICAL(&lock);
+    if(ok && xQueueSend(commands,&request,0)!=pdTRUE){portENTER_CRITICAL(&lock);accepting_connect=false;portEXIT_CRITICAL(&lock);ok=false;}
+    return ok;
 }
 static void network_event(void *arg,esp_event_base_t base,int32_t id,void *data){
     (void)arg;command_t c={0};
@@ -134,26 +156,34 @@ static esp_err_t status(httpd_req_t *r){
     cJSON_AddNumberToObject(body,"error",s.error);cJSON_AddNumberToObject(body,"save_error",s.save_error);
     cJSON_AddNumberToObject(body,"issue",app_net_issue(s.reason));cJSON_AddNumberToObject(body,"attempt",s.attempt);
     cJSON_AddNumberToObject(body,"attempt_seconds",s.attempt_seconds);
+    app_net_saved_t saved_list;app_network_saved_snapshot(&saved_list);
+    cJSON *list=cJSON_AddArrayToObject(body,"saved_networks");
+    if(!list){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
+    for(unsigned i=0;i<saved_list.count;++i)cJSON_AddItemToArray(list,cJSON_CreateString(saved_list.ssids[i]));
     char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
     headers(r);httpd_resp_set_type(r,"application/json");esp_err_t e=httpd_resp_send(r,json,HTTPD_RESP_USE_STRLEN);cJSON_free(json);return e;
 }
 static esp_err_t ai_status(httpd_req_t *r){
     if(!local_request(r,false))return deny(r);
-    ai_config_snapshot_t s;ai_config_snapshot(&s);
-    cJSON *body=cJSON_CreateObject();if(!body)return ESP_ERR_NO_MEM;
-    cJSON_AddBoolToObject(body,"ready",s.ready);cJSON_AddBoolToObject(body,"busy",s.busy);
-    cJSON_AddNumberToObject(body,"active",s.active);cJSON_AddNumberToObject(body,"error",s.error);
-    cJSON_AddNumberToObject(body,"submitted",s.submitted);cJSON_AddNumberToObject(body,"completed",s.completed);
-    cJSON_AddNumberToObject(body,"generation",s.generation);
-    ai_check_snapshot_t check;ai_check_snapshot(&check);
-    cJSON *test=cJSON_AddObjectToObject(body,"check");
-    if(!test){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
-    cJSON_AddNumberToObject(test,"revision",check.revision);cJSON_AddNumberToObject(test,"provider",check.provider);cJSON_AddNumberToObject(test,"state",check.state);
-    cJSON_AddStringToObject(test,"label",ai_check_label(check.state));cJSON_AddBoolToObject(test,"text",check.text);
-    cJSON_AddBoolToObject(test,"tools",check.tools);cJSON_AddBoolToObject(test,"audio",check.audio);cJSON_AddNumberToObject(test,"error",check.error);cJSON_AddStringToObject(test,"reason",ai_check_error_label(check.error));
-    cJSON_AddBoolToObject(body,"configured",s.configured[0]);
-    cJSON_AddStringToObject(body,"model",s.model);cJSON_AddStringToObject(body,"url",s.url);
-    char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
+    ai_config_snapshot_t *s=malloc(sizeof(*s));if(!s)return ESP_ERR_NO_MEM;ai_config_snapshot(s);
+    cJSON *body=cJSON_CreateObject();if(!body){free(s);return ESP_ERR_NO_MEM;}
+    cJSON_AddBoolToObject(body,"ready",s->ready);cJSON_AddBoolToObject(body,"busy",s->busy);
+    cJSON_AddNumberToObject(body,"active",s->active);cJSON_AddNumberToObject(body,"error",s->error);
+    cJSON_AddNumberToObject(body,"submitted",s->submitted);cJSON_AddNumberToObject(body,"completed",s->completed);
+    cJSON_AddNumberToObject(body,"generation",s->generation);
+    cJSON *list=cJSON_AddArrayToObject(body,"profiles");
+    if(!list){cJSON_Delete(body);free(s);return ESP_ERR_NO_MEM;}
+    for(unsigned i=0;i<AI_PROVIDER_COUNT;++i){
+     cJSON *entry=cJSON_CreateObject();if(!entry){cJSON_Delete(body);free(s);return ESP_ERR_NO_MEM;}cJSON_AddItemToArray(list,entry);
+     cJSON_AddNumberToObject(entry,"slot",i);cJSON_AddBoolToObject(entry,"configured",s->configured[i]);
+     cJSON_AddStringToObject(entry,"name",s->entries[i].name);cJSON_AddStringToObject(entry,"model",s->entries[i].model);cJSON_AddStringToObject(entry,"url",s->entries[i].url);
+     ai_check_snapshot_t check;ai_check_snapshot(i,&check);cJSON *test=cJSON_AddObjectToObject(entry,"check");
+     if(!test){cJSON_Delete(body);free(s);return ESP_ERR_NO_MEM;}
+     cJSON_AddNumberToObject(test,"revision",check.revision);cJSON_AddNumberToObject(test,"provider",check.provider);cJSON_AddNumberToObject(test,"state",check.state);
+     cJSON_AddStringToObject(test,"label",ai_check_label(check.state));cJSON_AddBoolToObject(test,"text",check.text);
+     cJSON_AddBoolToObject(test,"tools",check.tools);cJSON_AddBoolToObject(test,"audio",check.audio);cJSON_AddNumberToObject(test,"error",check.error);cJSON_AddStringToObject(test,"reason",ai_check_error_label(check.error));
+    }
+    free(s);char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
     headers(r);httpd_resp_set_type(r,"application/json");
     esp_err_t e=httpd_resp_send(r,json,HTTPD_RESP_USE_STRLEN);cJSON_free(json);return e;
 }
@@ -165,7 +195,7 @@ static esp_err_t ai_submit(httpd_req_t *r){
         if(n<=0){memset(form,0,sizeof(form));return ESP_FAIL;}received+=(unsigned)n;}
     char action[16];
     if(!memchr(form,0,received)&&app_net_form_value(form,"action",action,sizeof(action))&&!strcmp(action,"test")){
-        bool accepted=ai_check_request(0);memset(form,0,sizeof(form));headers(r);
+        unsigned slot;bool accepted=ai_config_slot(form,&slot)&&ai_check_request(slot);memset(form,0,sizeof(form));headers(r);
         if(!accepted)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Save a model configuration first, or wait for the current check.");
         httpd_resp_set_status(r,"202 Accepted");httpd_resp_set_type(r,"application/json");return httpd_resp_send(r,"{}",HTTPD_RESP_USE_STRLEN);
     }
@@ -254,8 +284,11 @@ static esp_err_t submit(httpd_req_t *r){
     if(memchr(form,0,received)){memset(form,0,sizeof(form));return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Invalid form");}
     bool ok=false;
     if(!strcmp(r->uri,"/api/wifi")){
-        command_t c={.type=CMD_CONNECT};ok=app_net_parse_credentials(form,&c.credentials);
-        if(ok){portENTER_CRITICAL(&lock);ok=!accepting_connect && !view.busy;if(ok)accepting_connect=true;portEXIT_CRITICAL(&lock);
+        char action[16];bool use_saved=app_net_form_value(form,"action",action,sizeof(action)) && !strcmp(action,"saved");
+        command_t c={.type=CMD_CONNECT};
+        if(use_saved){char ssid[33];ok=app_net_form_value(form,"ssid",ssid,sizeof(ssid)) && app_network_connect_saved(ssid);}
+        else ok=app_net_parse_credentials(form,&c.credentials);
+        if(ok && !use_saved){portENTER_CRITICAL(&lock);ok=!accepting_connect && !view.busy;if(ok)accepting_connect=true;portEXIT_CRITICAL(&lock);
             if(ok && xQueueSend(commands,&c,0)!=pdTRUE){portENTER_CRITICAL(&lock);accepting_connect=false;portEXIT_CRITICAL(&lock);ok=false;}}
         memset(&c,0,sizeof(c));
     }else{
@@ -398,8 +431,8 @@ static void cleanup(void){
 static esp_err_t initialize(void){
     esp_err_t e=nvs_flash_init();if(e!=ESP_OK)return e; // Never erase app/user data to recover networking.
     e=nvs_open("net_config",NVS_READWRITE,&store);if(e!=ESP_OK)return e;store_ready=true;
-    size_t n=sizeof(saved);e=nvs_get_blob(store,"station",&saved,&n);
-    if(e!=ESP_OK || n!=sizeof(saved) || !app_net_credentials_valid(&saved))memset(&saved,0,sizeof(saved));
+    esp_err_t load_error=net_history_load(store,&history);publish_saved();
+    if(load_error!=ESP_OK)ESP_LOGW(TAG,"Saved networks could not be loaded (%d)",load_error);
     e=esp_netif_init();if(e!=ESP_OK)return e;
     esp_sntp_config_t clock_config=ESP_NETIF_SNTP_DEFAULT_CONFIG("ntp.aliyun.com");
     clock_config.start=false;
@@ -440,6 +473,10 @@ static void worker(void *arg){
             case CMD_CONNECT_DEVICE:
                 if(s.portal || c.type==CMD_CONNECT_DEVICE){cancel_scan();e=connect_to(&c.credentials,true,&s);}
                 portENTER_CRITICAL(&lock);accepting_connect=false;portEXIT_CRITICAL(&lock);break;
+            case CMD_CONNECT_SAVED:{
+                int slot=app_net_history_find(&history,c.credentials.ssid);
+                if(slot>=0 && !s.busy){cancel_scan();e=connect_to(&history.entries[slot],true,&s);}
+                portENTER_CRITICAL(&lock);accepting_connect=false;portEXIT_CRITICAL(&lock);break;}
             case CMD_RETRY:if(s.saved && !s.busy){cancel_scan();e=connect_to(&saved,false,&s);}break;
             case CMD_SCAN:begin_scan(&s);break;
             case CMD_SCAN_DONE:if(scan_active)finish_scan(c.reason ? ESP_FAIL : ESP_OK,true);break;
@@ -447,9 +484,8 @@ static void worker(void *arg){
                 if(s.state==APP_NET_CONNECTING && !waiting_disconnect)s.associated=true;
                 break;
             case CMD_FORGET:
-                e=nvs_erase_key(store,"station");if(e==ESP_ERR_NVS_NOT_FOUND)e=ESP_OK;
-                if(e==ESP_OK)e=nvs_commit(store);
-                if(e==ESP_OK){memset(&saved,0,sizeof(saved));memset(&candidate,0,sizeof(candidate));s.saved=false;
+                e=net_history_clear(store,&history);
+                if(e==ESP_OK){publish_saved();memset(&candidate,0,sizeof(candidate));s.saved=false;
                     s.state=APP_NET_OFFLINE;s.busy=false;s.associated=false;s.save_error=0;s.ssid[0]=0;
                     waiting_disconnect=false;connect_deadline=retry_at=0;s.ip[0]=0;esp_wifi_disconnect();}
                 break;
@@ -461,8 +497,8 @@ static void worker(void *arg){
                     s.state=APP_NET_CONNECTED;s.busy=false;s.associated=true;s.attempt_seconds=0;s.reason=0;s.error=0;connect_deadline=retry_at=0;attempts=0;
                     if(!time_started && esp_netif_sntp_start()==ESP_OK)time_started=true;
                     struct in_addr ip={.s_addr=c.ip};inet_ntoa_r(ip,s.ip,sizeof(s.ip));
-                    if(candidate_new){e=nvs_set_blob(store,"station",&candidate,sizeof(candidate));if(e==ESP_OK)e=nvs_commit(store);
-                        s.save_error=e;if(e==ESP_OK){saved=candidate;s.saved=true;candidate_new=false;}}
+                    if(candidate_new){e=net_history_save(store,&history,&candidate);
+                        s.save_error=e;if(e==ESP_OK){publish_saved();s.saved=true;candidate_new=false;}}
                     ESP_LOGI(TAG,"Station obtained IP; free heap=%u largest=%u",(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
                 }break;}
             case CMD_DISCONNECTED:

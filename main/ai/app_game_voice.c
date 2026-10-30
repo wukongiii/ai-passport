@@ -20,8 +20,10 @@ static portMUX_TYPE lock=portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t worker;
 static game_voice_snapshot_t view;
 static ai_session_t session;
-static ai_game_snapshot_t game;
-static ai_reply_t reply;
+typedef struct {ai_game_snapshot_t game;ai_reply_t reply;} voice_job_t;
+/* Owned from input reservation through owner-side completion; the worker must
+ * finish before this mailbox can be freed, including cancellation paths. */
+static voice_job_t *job;
 static bool queued,cancelled,send_requested,completed,occupied;
 static unsigned provider,config_revision;
 static uint32_t job_token;
@@ -66,7 +68,7 @@ finish:
   if(lease){esp_err_t slept=bsp_audio_sleep();if(error==ESP_OK)error=slept;app_speech_capture_release();}
   if(error==ESP_OK&&!stop()){
    if(!audible||capture.samples<VOICE_RATE/4){error=ESP_ERR_INVALID_ARG;publish(GAME_VOICE_ERROR,error,TXT_GAME_VOICE_EMPTY);}
-   else{publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={transport_stop,NULL};error=ai_transport_request(provider,&game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",record,capture.samples,&reply,&control);record=NULL;}
+   else{publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={transport_stop,NULL};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",record,capture.samples,&job->reply,&control);record=NULL;}
   }
   free(record);
   portENTER_CRITICAL(&lock);completed=true;view.error=error;portEXIT_CRITICAL(&lock);
@@ -116,13 +118,15 @@ bool app_game_voice_input(ai_game_target_t target,unsigned slot,app_gesture_t ge
  portENTER_CRITICAL(&lock);bool unavailable=occupied || completed;portEXIT_CRITICAL(&lock);if(unavailable)return true;
  active_target=target;
  portENTER_CRITICAL(&lock);cancelled=false;portEXIT_CRITICAL(&lock);
- ai_config_snapshot_t config;ai_config_snapshot(&config);app_network_snapshot_t network;app_network_snapshot(&network);
+ ai_runtime_snapshot_t config;ai_config_runtime(&config);app_network_snapshot_t network;app_network_snapshot(&network);
  if(!config.ready||config.active>=AI_PROVIDER_COUNT||!config.configured[config.active]||!ai_model_adapter(ai_provider(config.active)->id)){publish(GAME_VOICE_ERROR,0,TXT_GAME_VOICE_NEED_KEY);return true;}
  if(network.state!=APP_NET_CONNECTED){publish(GAME_VOICE_ERROR,0,TXT_GAME_VOICE_NEED_WIFI);return true;}
  if(!worker){publish(GAME_VOICE_ERROR,ESP_ERR_NO_MEM,TXT_GAME_VOICE_REJECT);return true;}
  portENTER_CRITICAL(&lock);unavailable=occupied||completed;if(!unavailable)occupied=true;portEXIT_CRITICAL(&lock);
  if(unavailable)return true;
- if(ai_session_begin(&session,target,esp_timer_get_time(),&game,&job_token)!=AI_FLOW_OK){portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);return true;}
+ job=malloc(sizeof(*job));
+ if(!job){portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);publish(GAME_VOICE_ERROR,ESP_ERR_NO_MEM,TXT_GAME_VOICE_REJECT);return true;}
+ if(ai_session_begin(&session,target,esp_timer_get_time(),&job->game,&job_token)!=AI_FLOW_OK){free(job);job=NULL;portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);return true;}
  if(!(follow_pending&&follow_model_revision==config.generation&&follow_revision==r&&follow_configuration==c&&follow_activation==target.activation&&follow_module==target.module_id))followup[0]=0;
  snprintf(worker_input,sizeof(worker_input),"%s",followup);
  follow_pending=false;provider=config.active;config_revision=config.generation;active_target=target;
@@ -132,24 +136,26 @@ bool app_game_voice_input(ai_game_target_t target,unsigned slot,app_gesture_t ge
 bool app_game_voice_tick(ai_game_target_t target,int64_t now){
  static unsigned rendered;game_voice_snapshot_t s;app_game_voice_snapshot(&s);
  if(s.state!=GAME_VOICE_IDLE && (target.ops!=active_target.ops || target.context!=active_target.context || target.module_id!=active_target.module_id || target.activation!=active_target.activation))app_game_voice_cancel();
- if(session.pending){uint32_t r,c;ai_config_snapshot_t config;ai_config_snapshot(&config);
+ if(session.pending){uint32_t r,c;ai_runtime_snapshot_t config;ai_config_runtime(&config);
   if(target.ops!=active_target.ops||target.module_id!=active_target.module_id||target.activation!=active_target.activation||!target.ops||!target.ops->stamp(target.context,&r,&c)||r!=session.revision||c!=session.configuration||config.generation!=config_revision||now>=session.deadline)app_game_voice_cancel();
  }
  portENTER_CRITICAL(&lock);bool done=completed;completed=false;if(done)occupied=false;bool was_cancelled=cancelled;int error=view.error;portEXIT_CRITICAL(&lock);
  if(done){
   if(was_cancelled){publish(GAME_VOICE_IDLE,0,"");}
   else if(error){ai_session_cancel(&session);if(strcmp(s.text,TXT_GAME_VOICE_EMPTY)){char text[96];snprintf(text,sizeof(text),TXT_GAME_VOICE_FAILED,error);publish(GAME_VOICE_ERROR,error,text);}}
-  else{ai_completion_t result;ai_flow_result_t flow=ai_session_finish(&session,target,job_token,now,&reply,&result);
+  else{ai_completion_t result;ai_flow_result_t flow=ai_session_finish(&session,target,job_token,now,&job->reply,&result);
    if(flow!=AI_FLOW_OK||result.game_result!=AI_GAME_OK)publish(GAME_VOICE_ERROR,0,TXT_GAME_VOICE_REJECT);
    else if(result.executed){
-    static ai_json_t json;char text[AI_TEXT_CAPACITY];
-    if(ai_json_parse(&json,result.text,strlen(result.text))&&ai_json_string(&json,ai_json_member(&json,0,"message"),text,sizeof(text))){publish(GAME_VOICE_REPLY,0,text);app_speech_say(text);}
+    ai_json_t *json=malloc(sizeof(*json));char text[AI_TEXT_CAPACITY];
+    bool message=json&&ai_json_parse(json,result.text,strlen(result.text))&&ai_json_string(json,ai_json_member(json,0,"message"),text,sizeof(text));free(json);
+    if(message){publish(GAME_VOICE_REPLY,0,text);app_speech_say(text);}
     else publish(GAME_VOICE_REPLY,0,TXT_GAME_VOICE_DONE);
    }else{
     publish(GAME_VOICE_REPLY,0,result.text);app_speech_say(result.text);
     if(result.kind==AI_REPLY_CLARIFY){snprintf(followup,sizeof(followup),"Clarification previously asked: %s. The recording answers this question.",result.text);follow_pending=true;follow_model_revision=config_revision;follow_revision=session.revision;follow_configuration=session.configuration;follow_activation=target.activation;follow_module=target.module_id;}
    }
   }
+  free(job);job=NULL;
  }
  app_game_voice_snapshot(&s);bool changed=rendered!=s.revision;rendered=s.revision;return changed;
 }

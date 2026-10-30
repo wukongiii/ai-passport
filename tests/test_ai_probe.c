@@ -1,9 +1,14 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+static bool fail_workspace;
+static void *probe_malloc(size_t size){return fail_workspace?NULL:malloc(size);}
+#define malloc probe_malloc
 #define AI_PROBE_HOST_TEST 1
 #include "../main/ai/ai_probe.c"
+#undef malloc
 const unsigned char probe_audio[(AI_PROBE_SAMPLES+1)/2]={0};
 static unsigned generation=2,requests;
 static int fail_stage,wrong_audio;
@@ -12,6 +17,7 @@ static ai_check_snapshot_t result;
 int64_t esp_timer_get_time(void){return now;}
 void vTaskDelay(TickType_t t){now+=(int64_t)t*1000;}
 void ai_config_snapshot(ai_config_snapshot_t *out){memset(out,0,sizeof(*out));out->generation=generation;}
+void ai_config_runtime(ai_runtime_snapshot_t *out){memset(out,0,sizeof(*out));out->generation=generation;}
 void app_network_snapshot(app_network_snapshot_t *out){memset(out,0,sizeof(*out));out->state=APP_NET_CONNECTED;}
 void ai_check_publish(unsigned p,unsigned g,ai_check_state_t state,int error){assert(p==0&&g==2);result.state=state;result.error=error;if(state==AI_CHECK_TOOLS)result.text=true;if(state==AI_CHECK_AUDIO)result.tools=true;if(state==AI_CHECK_PASS)result.audio=true;}
 esp_err_t ai_transport_request(unsigned p,const ai_game_snapshot_t *g,const char *input,uint8_t *audio,unsigned samples,ai_reply_t *out,const ai_transport_control_t *c){
@@ -25,6 +31,7 @@ esp_err_t ai_transport_request(unsigned p,const ai_game_snapshot_t *g,const char
 }
 static void reset(void){requests=0;generation=2;result=(ai_check_snapshot_t){0};}
 int main(void){
+ fail_workspace=true;reset();ai_probe_run(0,2);assert(!requests&&result.error==ESP_ERR_NO_MEM);fail_workspace=false;
  reset();ai_probe_run(0,2);assert(requests==3&&result.state==AI_CHECK_PASS&&result.text&&result.tools&&result.audio);
  for(fail_stage=1;fail_stage<=3;++fail_stage){reset();ai_probe_run(0,2);assert(requests==(unsigned)fail_stage&&result.state==AI_CHECK_FAILED&&result.error==401);}
  fail_stage=0;wrong_audio=1;reset();ai_probe_run(0,2);assert(result.state==AI_CHECK_FAILED&&!result.audio&&result.tools);
