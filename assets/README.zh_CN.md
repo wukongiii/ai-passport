@@ -116,3 +116,11 @@ python3 tools/generate_network_font.py --font build/font-tools/NotoSansCJKsc-Reg
 [`components/esp_tts/LICENSE`](../components/esp_tts/LICENSE)，使用范围限定于乐鑫产品。
 匹配 C3 库来源记录于
 [`components/esp_tts/README.zh_CN.md`](../components/esp_tts/README.zh_CN.md)。
+
+### 模型能力检测音频
+
+`voices/capability_probe.adpcm` 是本项目 API 检测使用的中文合成语音，内容指定左侧
+选手，由本地 macOS 语音合成生成，不含个人录音。8 kHz 单声道 IMA ADPCM 共
+15707 个采样（7854 字节），初始预测值和索引为零。仅在独立能力检测时解码为标准
+16 位 PCM WAV。嵌入应用只读段；此检测不采集麦克风，也不修改球局。
+SHA-256：`24e5b93fbd0171868ccc21cf0b560188add9ef8541f13034ecac12a9a18e6a0f`。

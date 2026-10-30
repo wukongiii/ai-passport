@@ -7,6 +7,7 @@
 static int fail_alloc;
 static void *voice_malloc(size_t n){if(fail_alloc && !--fail_alloc)return NULL;return malloc(n);}
 #define malloc voice_malloc
+#include "../main/ai/ai_transport.c"
 #include "../main/ai/app_game_voice.c"
 #undef malloc
 static int64_t now=100;
@@ -30,9 +31,11 @@ void vTaskDelay(TickType_t n){now+=(int64_t)n*1000;}
 unsigned ulTaskNotifyTake(int clear,TickType_t ticks){(void)clear;(void)ticks;return 0;}
 void xTaskNotifyGive(TaskHandle_t h){assert(h);}
 int xTaskCreate(void (*f)(void *),const char *name,unsigned size,void *a,unsigned p,TaskHandle_t *h){(void)f;(void)name;(void)size;(void)a;(void)p;*h=(void *)1;return pdPASS;}
-const ai_provider_t *ai_provider(unsigned p){static const ai_provider_t a={.id="doubao",.available=true};assert(p==0);return &a;}
+const ai_provider_t *ai_provider(unsigned p){static const ai_provider_t a={.id="compatible"};assert(p==0);return &a;}
 void ai_config_snapshot(ai_config_snapshot_t *s){*s=cfg;}
-bool ai_config_credentials(unsigned p,char *key,char *model){assert(p==0);strcpy(key,"test-only");strcpy(model,"test-model");return true;}
+bool ai_config_connection(unsigned p,char *key,char *model,char *url,unsigned *gen){assert(p==0);strcpy(key,"test-only");strcpy(model,"test-model");strcpy(url,"https://example.com/v1/chat/completions");if(gen)*gen=cfg.generation;return true;}
+bool ai_check_take(unsigned *p,unsigned *g){(void)p;(void)g;return false;}
+void ai_probe_run(unsigned p,unsigned g){(void)p;(void)g;}
 void app_network_snapshot(app_network_snapshot_t *s){*s=net;}
 void app_speech_stop(void){}
 bool app_speech_capture_acquire(void){assert(!lease_owned);lease_owned=true;return true;}
@@ -51,7 +54,7 @@ esp_err_t bsp_audio_read(void *data,size_t size){
  return ESP_OK;
 }
 int esp_crt_bundle_attach(void *p){(void)p;return 0;}
-esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->crt_bundle_attach&&c->disable_auto_redirect);headers=read_attempts=0;sent=0;first[0]=0;return (void *)2;}
+esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->crt_bundle_attach&&c->disable_auto_redirect&&!strcmp(c->url,"https://example.com/v1/chat/completions"));headers=read_attempts=0;sent=0;first[0]=0;return (void *)2;}
 esp_err_t esp_http_client_set_header(void *c,const char *k,const char *v){assert(c&&k&&v);return ESP_OK;}
 esp_err_t esp_http_client_set_timeout_ms(void *c,int t){assert(c&&t==1000);return ESP_OK;}
 esp_err_t esp_http_client_open(void *c,int n){assert(c&&n>0);expected=(unsigned)n;return ESP_OK;}
@@ -85,7 +88,7 @@ int main(void){
  begin_job();process_job();assert(!app_game_voice_input(target,0,APP_GESTURE_SHORT));drain();assert(executes==1);
  begin_job();assert(app_game_voice_input(target,1,APP_GESTURE_LONG));process_job();drain();assert(view.state==GAME_VOICE_IDLE&&executes==1);
  begin_job();process_job();++revision;drain();assert(executes==1); // local score race
- begin_job();process_job();++cfg.revision;drain();assert(executes==1); // model change race
+ begin_job();process_job();++cfg.generation;drain();assert(executes==1); // model change race
  begin_job();process_job();++target.activation;drain();assert(executes==1); // leave/reenter
  begin_job();process_job();now=session.deadline;drain();assert(executes==1);
  for(int allocation=1;allocation<=6;++allocation){fail_alloc=allocation;begin_job();process_job();drain();assert(view.state==GAME_VOICE_ERROR);}fail_alloc=0;

@@ -1,7 +1,7 @@
 #include "ai_provider.h"
 #include "ai_json.h"
 #include <string.h>
-static bool encode(ai_json_t *workspace,const ai_model_request_t *r,char *out,size_t capacity){
+static bool encode_common(ai_json_t *workspace,const ai_model_request_t *r,char *out,size_t capacity){
     if(!workspace||!r||!r->game||!r->model||!r->input||!r->game->instructions||!out||!capacity)return false;
     if(!*r->model||strlen(r->model)>96||!*r->input||strlen(r->input)>=AI_INPUT_CAPACITY)return false;
     ai_json_t *j=workspace;
@@ -13,7 +13,8 @@ static bool encode(ai_json_t *workspace,const ai_model_request_t *r,char *out,si
     ai_json_quote(&w,r->game->instructions);
     ai_json_write(&w,"},{\"role\":\"system\",\"content\":");ai_json_quote(&w,r->game->context);
     ai_json_write(&w,"},{\"role\":\"user\",\"content\":");ai_json_quote(&w,r->input);
-    ai_json_write(&w,"}],\"tools\":[");
+    bool tools=j->nodes[0].count>0;
+    ai_json_write(&w,"}]");if(tools)ai_json_write(&w,",\"tools\":[");
     for(int tool=1,index=0;tool<j->nodes[0].next;tool=j->nodes[tool].next,++index){
         const char *const fields[]={"name","description","parameters"};
         if(!ai_json_fields(j,tool,fields,3))return false;
@@ -24,10 +25,12 @@ static bool encode(ai_json_t *workspace,const ai_model_request_t *r,char *out,si
         memcpy(w.data+w.used,j->text+j->nodes[tool].start,length);w.used+=length;w.data[w.used]=0;
         ai_json_write(&w,"}");
     }
-    ai_json_write(&w,"]");
-    ai_json_write(&w,",\"tool_choice\":\"auto\",\"parallel_tool_calls\":false,\"thinking\":{\"type\":\"disabled\"},\"temperature\":0,\"max_tokens\":256,\"stream\":false}");
+    if(tools)ai_json_write(&w,"]");
+    if(tools)ai_json_write(&w,",\"tool_choice\":\"auto\",\"parallel_tool_calls\":false");
+    ai_json_write(&w,",\"temperature\":0,\"max_tokens\":256,\"stream\":false}");
     return w.ok && ai_json_parse(j,out,w.used);
 }
+static bool encode(ai_json_t *w,const ai_model_request_t *r,char *b,size_t n){return encode_common(w,r,b,n);}
 static bool decode(ai_json_t *workspace,const char *body,size_t size,ai_reply_t *out){
     if(!workspace||!out||size>AI_RESPONSE_CAPACITY)return false;
     ai_json_t *j=workspace;if(!ai_json_parse(j,body,size))return false;
@@ -58,11 +61,11 @@ static bool decode(ai_json_t *workspace,const char *body,size_t size,ai_reply_t 
     }else return false;
     *out=reply;return true;
 }
-static bool audio_parts(ai_json_t *workspace,const ai_model_request_t *r,char *head,size_t head_capacity,char *tail,size_t tail_capacity){
+static bool audio_common(ai_json_t *workspace,const ai_model_request_t *r,char *head,size_t head_capacity,char *tail,size_t tail_capacity){
     if(!r||!r->input||!*r->input||strlen(r->input)>=AI_INPUT_CAPACITY)return false;
     const char marker[]="__DEVICE_AUDIO_INPUT__";
     ai_model_request_t audio=*r;audio.input=marker;
-    if(!encode(workspace,&audio,head,head_capacity))return false;
+    if(!encode_common(workspace,&audio,head,head_capacity))return false;
     char *at=strstr(head,"{\"role\":\"user\",\"content\":\"__DEVICE_AUDIO_INPUT__\"}");if(!at)return false;
     const char *after=at+strlen("{\"role\":\"user\",\"content\":\"__DEVICE_AUDIO_INPUT__\"}");
     const char *suffix="\",\"format\":\"wav\"}},{\"type\":\"text\",\"text\":";
@@ -71,4 +74,5 @@ static bool audio_parts(ai_json_t *workspace,const ai_model_request_t *r,char *h
     *at=0;size_t used=strlen(head);ai_json_writer_t h={head,head_capacity,used,true};
     ai_json_write(&h,"{\"role\":\"user\",\"content\":[{\"type\":\"input_audio\",\"input_audio\":{\"data\":\"");return h.ok;
 }
-const ai_model_adapter_t ai_ark_adapter={"doubao","https://ark.cn-beijing.volces.com/api/v3/chat/completions",encode,audio_parts,decode};
+static bool audio_parts(ai_json_t *w,const ai_model_request_t *r,char *h,size_t hn,char *t,size_t tn){return audio_common(w,r,h,hn,t,tn);}
+const ai_model_adapter_t ai_compatible_adapter={"compatible",encode,audio_parts,decode};

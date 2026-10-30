@@ -58,7 +58,7 @@ static void parser_tests(void){
 int main(void){
     printf("AI bounded storage: snapshot=%zu parser=%zu session=%zu reply=%zu completion=%zu bytes\n",sizeof(snapshot),sizeof(workspace),sizeof(session),sizeof(reply),sizeof(completion));
     parser_tests();game_preferences_default(&names.eight);strcpy(names.eight.players[0],"张三");strcpy(names.eight.players[1],"李四");
-    adapter=ai_model_adapter("doubao");assert(adapter&&!ai_model_adapter("unknown"));
+    adapter=ai_model_adapter("compatible");assert(adapter&&!ai_model_adapter("unknown"));
     const app_module_t modules[]={app_module_eight,{2,"Chase","placeholder",APP_ENTRY_GAME,NULL,NULL,APP_ART_CHASE,NULL}};
     app_modules_init(modules,2);assert(app_container_init(&app,modules,2,APP_ROTATION_270));
     assert(ai_session_begin(&session,app_container_ai_target(&app),0,&snapshot,&token)==AI_FLOW_UNAVAILABLE);
@@ -76,6 +76,9 @@ int main(void){
     assert(strstr(audio_body,"input_audio")&&strstr(audio_body,"adjust_score")&&strstr(audio_body,"wav"));
     assert(!adapter->audio_parts(&workspace,&audio,head,20,tail,sizeof(tail)));
     assert(!adapter->audio_parts(&workspace,&audio,head,sizeof(head),tail,8));
+    const ai_model_adapter_t *generic=ai_model_adapter("compatible");assert(generic);
+    assert(generic->encode(&workspace,&bounded,body,sizeof(body))&&!strstr(body,"thinking"));
+    assert(generic->audio_parts(&workspace,&audio,head,sizeof(head),tail,sizeof(tail))&&!strstr(tail,"thinking"));
     uint32_t oldtoken=token;
     ai_reply_t ignored={.kind=AI_REPLY_TEXT,.text="ignored"};
     assert(ai_session_finish(&session,app_container_ai_target(&app),token+1,150,&ignored,&completion)==AI_FLOW_DUPLICATE && session.pending);assert(ai_session_begin(&session,app_container_ai_target(&app),101,&snapshot,&token)==AI_FLOW_BUSY);

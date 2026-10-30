@@ -144,16 +144,15 @@ static esp_err_t ai_status(httpd_req_t *r){
     cJSON_AddBoolToObject(body,"ready",s.ready);cJSON_AddBoolToObject(body,"busy",s.busy);
     cJSON_AddNumberToObject(body,"active",s.active);cJSON_AddNumberToObject(body,"error",s.error);
     cJSON_AddNumberToObject(body,"submitted",s.submitted);cJSON_AddNumberToObject(body,"completed",s.completed);
-    cJSON_AddStringToObject(body,"ark_model",s.ark_model);
-    cJSON *list=cJSON_AddArrayToObject(body,"providers");
-    if(!list){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
-    for(unsigned i=0;i<AI_PROVIDER_COUNT;++i){
-        const ai_provider_t *p=ai_provider(i);cJSON *item=cJSON_CreateObject();
-        if(!item){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
-        cJSON_AddStringToObject(item,"id",p->id);cJSON_AddStringToObject(item,"name",p->name);
-        cJSON_AddStringToObject(item,"model",p->model);cJSON_AddStringToObject(item,"url",p->signup_url);
-        cJSON_AddBoolToObject(item,"available",p->available);cJSON_AddBoolToObject(item,"configured",s.configured[i]);cJSON_AddItemToArray(list,item);
-    }
+    cJSON_AddNumberToObject(body,"generation",s.generation);
+    ai_check_snapshot_t check;ai_check_snapshot(&check);
+    cJSON *test=cJSON_AddObjectToObject(body,"check");
+    if(!test){cJSON_Delete(body);return ESP_ERR_NO_MEM;}
+    cJSON_AddNumberToObject(test,"revision",check.revision);cJSON_AddNumberToObject(test,"provider",check.provider);cJSON_AddNumberToObject(test,"state",check.state);
+    cJSON_AddStringToObject(test,"label",ai_check_label(check.state));cJSON_AddBoolToObject(test,"text",check.text);
+    cJSON_AddBoolToObject(test,"tools",check.tools);cJSON_AddBoolToObject(test,"audio",check.audio);cJSON_AddNumberToObject(test,"error",check.error);cJSON_AddStringToObject(test,"reason",ai_check_error_label(check.error));
+    cJSON_AddBoolToObject(body,"configured",s.configured[0]);
+    cJSON_AddStringToObject(body,"model",s.model);cJSON_AddStringToObject(body,"url",s.url);
     char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
     headers(r);httpd_resp_set_type(r,"application/json");
     esp_err_t e=httpd_resp_send(r,json,HTTPD_RESP_USE_STRLEN);cJSON_free(json);return e;
@@ -164,6 +163,12 @@ static esp_err_t ai_submit(httpd_req_t *r){
     char form[APP_NET_FORM_MAX+1]={0};unsigned received=0;
     while(received<r->content_len){int n=httpd_req_recv(r,form+received,r->content_len-received);
         if(n<=0){memset(form,0,sizeof(form));return ESP_FAIL;}received+=(unsigned)n;}
+    char action[16];
+    if(!memchr(form,0,received)&&app_net_form_value(form,"action",action,sizeof(action))&&!strcmp(action,"test")){
+        bool accepted=ai_check_request(0);memset(form,0,sizeof(form));headers(r);
+        if(!accepted)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Save a model configuration first, or wait for the current check.");
+        httpd_resp_set_status(r,"202 Accepted");httpd_resp_set_type(r,"application/json");return httpd_resp_send(r,"{}",HTTPD_RESP_USE_STRLEN);
+    }
     ai_config_request_t request={0};unsigned id=0;
     bool ok=!memchr(form,0,received) && ai_config_parse(form,&request) && ai_config_submit(&request,&id);
     memset(form,0,sizeof(form));memset(&request,0,sizeof(request));headers(r);
@@ -282,7 +287,7 @@ static void poll_dns(void){
     if(count)sendto(dns_socket,answer,count,0,(struct sockaddr *)&peer,size);
 }
 static esp_err_t start_http(void){
-    httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();cfg.stack_size=6144;cfg.max_open_sockets=3;
+    httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();cfg.stack_size=8192;cfg.max_open_sockets=3;
     cfg.max_uri_handlers=10;
     cfg.lru_purge_enable=true;cfg.recv_wait_timeout=3;cfg.send_wait_timeout=3;
     esp_err_t e=httpd_start(&server,&cfg);if(e!=ESP_OK)return e;
@@ -497,7 +502,7 @@ static void worker(void *arg){
 void app_network_init(void){
     if(commands)return;
     commands=xQueueCreate(6,sizeof(command_t));
-    if(!commands || xTaskCreate(worker,"network",6144,NULL,3,NULL)!=pdPASS){
+    if(!commands || xTaskCreate(worker,"network",8192,NULL,3,NULL)!=pdPASS){
         if(commands){vQueueDelete(commands);commands=NULL;}app_network_snapshot_t s={.error=ESP_ERR_NO_MEM};publish(&s);
     }
 }

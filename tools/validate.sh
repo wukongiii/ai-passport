@@ -92,7 +92,7 @@ run_static_checks() {
         main/ui/app_actions.c main/ui/app_layout.c -o "${test_dir}/test_eight_module"
     "${test_dir}/test_eight_module"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/bsp_stubs \
-        tests/test_ai_interaction.c main/ai/ai_json.c main/ai/ai_session.c main/ai/ai_provider.c main/ai/ai_ark.c \
+        tests/test_ai_interaction.c main/ai/ai_json.c main/ai/ai_session.c main/ai/ai_provider.c main/ai/ai_chat_completions.c \
         main/app/app_container.c main/games/eight_module.c main/games/eight_ai.c main/games/game_preferences.c \
         main/network/app_network_model.c main/app/app_preferences.c main/score/score.c main/score/score_config.c \
         main/score/chinese_eight.c main/score/score_controller.c main/ui/app_actions.c main/ui/app_layout.c \
@@ -100,9 +100,12 @@ run_static_checks() {
     "${test_dir}/test_ai_interaction"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/game_voice_stubs -Itests/speech_stubs -Itests/bsp_stubs \
         -DportMAX_DELAY=0xffffffffU tests/test_game_voice.c main/ai/voice_capture.c \
-        main/ai/ai_json.c main/ai/ai_session.c main/ai/ai_provider.c main/ai/ai_ark.c main/ui/app_actions.c \
+        main/ai/ai_json.c main/ai/ai_session.c main/ai/ai_provider.c main/ai/ai_chat_completions.c main/ui/app_actions.c \
         -lm -o "${test_dir}/test_game_voice"
     "${test_dir}/test_game_voice"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/game_voice_stubs -Itests/speech_stubs -Itests/bsp_stubs \
+        tests/test_ai_probe.c main/ai/ai_json.c -o "${test_dir}/test_ai_probe"
+    "${test_dir}/test_ai_probe"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         -Itests/score_stubs -Itests/bsp_stubs \
         tests/test_score_store.c main/score/score.c main/score/score_config.c main/score/chinese_eight.c main/ui/app_actions.c main/ui/app_layout.c \

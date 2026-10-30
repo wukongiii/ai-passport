@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "../app/app_preferences.h"
 /* Wire protocol and persisted credential validation are independent of IDF/UI. */
-enum { APP_NET_FORM_MAX=512, APP_NET_RETRY_LIMIT=3, APP_NET_PORTAL_SECONDS=300 };
+enum { APP_NET_FORM_MAX=2048, APP_NET_RETRY_LIMIT=3, APP_NET_PORTAL_SECONDS=300 };
 typedef struct { char ssid[33],password[65]; } app_net_credentials_t;
 bool app_net_credentials_valid(const app_net_credentials_t *);
 bool app_net_parse_credentials(const char *form,app_net_credentials_t *out);

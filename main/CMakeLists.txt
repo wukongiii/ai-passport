@@ -1,11 +1,13 @@
 idf_component_register(
     SRCS "main.c"
          "ai/app_game_voice.c"
+         "ai/ai_transport.c"
+         "ai/ai_probe.c"
          "ai/voice_capture.c"
          "ai/ai_json.c"
          "ai/ai_session.c"
          "ai/ai_provider.c"
-         "ai/ai_ark.c"
+         "ai/ai_chat_completions.c"
          "ai/ai_config.c"
          "ai/ai_config_store.c"
          "speech/speech_model.c"
@@ -53,3 +55,5 @@ idf_component_register(
 
 # Voice data stays memory mapped in app rodata; preserve the existing partitions.
 target_add_binary_data(${COMPONENT_LIB} "${CMAKE_CURRENT_LIST_DIR}/../assets/voices/esp_tts_voice_data_xiaoxin_small.dat" BINARY)
+
+target_add_binary_data(${COMPONENT_LIB} "${CMAKE_CURRENT_LIST_DIR}/../assets/voices/capability_probe.adpcm" BINARY)

@@ -6,13 +6,16 @@
 <label for="gameSelect">选择玩法</label><select id="gameSelect" disabled><option>正在读取玩法…</option></select>
 <form id="gameForm" hidden><h3>中八 · 选手名字</h3><label for="player1">左侧选手</label><input id="player1" name="player1" required maxlength="8" autocomplete="off" spellcheck="false" disabled><label for="player2">右侧选手</label><input id="player2" name="player2" required maxlength="8" autocomplete="off" spellcheck="false" disabled><p class="muted">每人 1–8 个字符，支持汉字、英文字母、数字和常用标点。前后空格会去除，两人名字不能相同；暂不支持表情、生僻扩展汉字和其他语言字母。</p><button id="gameSave" disabled>保存中八配置</button></form>
 <p id="gamePlaceholder" class="muted" hidden>此玩法配置即将开放。</p><button id="gameReload" type="button" disabled>重新读取已保存配置</button><div id="gameMessage" class="connection" role="status" aria-live="polite">正在读取玩法配置…</div></section>
-<section id="ai"><h2>AI / 语音 · 模型配置</h2><p class="muted">配置豆包方舟 API Key 和模型，其他平台暂时占位。这里只保存配置，设备端 AI 指令调用尚未接入。</p>
-<label for="aiProvider">模型平台</label><select id="aiProvider"></select><p id="aiPlaceholder" class="muted" hidden>此模型暂未开放配置，已有配置会保留。</p>
+<section id="ai"><h2>AI / 语音 · 模型配置</h2><p class="muted">填写模型 ID、API URL 和 API Key。接口需兼容 Chat Completions，语音记分还需支持 WAV 音频输入和工具调用。</p>
+
 <div id="aiControls">
-<p id="aiModel" class="muted"></p><p><a id="aiSignup" target="_blank" rel="noopener noreferrer">注册 / 登录，申请 API Key ↗</a></p><p class="muted">申请 Key 需要互联网；若热点无法上网，请暂时切换手机网络，申请后再连回设备热点。请使用方舟 API Key。</p>
 <div id="aiState" class="connection" role="status" aria-live="polite">正在读取模型配置…</div>
-<form id="aiForm"><div id="aiModelField"><label for="aiModelId">方舟 Model ID / Endpoint ID</label><input id="aiModelId" name="model" maxlength="96" autocomplete="off" spellcheck="false" placeholder="doubao-seed-2-0-mini-260428"><p class="muted">填写已开通的模型 ID，或 ep- 开头的推理接入点 ID。可修改默认值。</p></div>
-<label id="aiKeyLabel" for="aiKey">方舟 API Key</label><input id="aiKey" name="key" type="password" autocomplete="new-password" maxlength="256" spellcheck="false" placeholder="粘贴对应服务的 API Key"><p id="aiKeyNote" class="muted"></p><button id="aiSave">保存并设为当前</button></form><button id="aiSelect" type="button">使用已保存的豆包配置</button><button id="aiRemove" type="button" style="background:#854a3d">删除豆包配置</button></div><p id="aiMessage" role="status" aria-live="polite"></p></section>
+<form id="aiForm"><label for="aiModelId">模型 ID / Endpoint ID</label><input id="aiModelId" name="model" maxlength="96" autocomplete="off" spellcheck="false" required><p class="muted">填写服务商提供的完整模型标识或推理接入点标识；不是自行起的显示名称。</p>
+<label for="aiUrl">API URL</label><input id="aiUrl" name="url" type="url" maxlength="256" autocomplete="off" spellcheck="false" required placeholder="https://example.com/v1/chat/completions"><p class="muted">填写完整请求地址，包含 /chat/completions 路径。支持 HTTPS；HTTP 会明文传输 Key 和音频，仅用于可信网络。模型、URL 和 Key 必须属于同一服务。</p>
+<label for="aiKey">API Key</label><input id="aiKey" name="key" type="password" autocomplete="new-password" maxlength="256" spellcheck="false"><p id="aiKeyNote" class="muted">Key 不回显。已保存时留空可保留原 Key；改变服务 URL 时请同时更换 Key。</p>
+<button id="aiSave">保存、启用并检测</button></form>
+<button id="aiReload" type="button">重新读取已保存配置</button><button id="aiTest" type="button">检测已保存模型</button><p class="muted">检测会发送三次少量 API 请求，可能产生费用：文本、工具调用、固定测试语音。不会上传麦克风录音，也不会修改比分。检测通过只代表本次样例通过。</p>
+<div id="aiCheck" class="connection" role="status" aria-live="polite">未检测</div><button id="aiSelect" type="button">设为当前</button><button id="aiRemove" type="button" style="background:#854a3d">删除 API Key</button></div><p id="aiMessage" role="status" aria-live="polite"></p></section>
 <section><h2>显示设置</h2><form id="display"><label for="rotation">屏幕方向</label><select id="rotation" name="rotation"><option value="270">270° · 按键在上</option><option value="90">90° · 按键在下</option></select>
 <label for="brightness">亮度</label><output id="brightnessValue"></output><input id="brightness" type="range" min="20" max="100" step="10" name="brightness"><div class="ends"><span>20%</span><span>100%</span></div>
 <label for="dim">自动变暗</label><output id="dimValue"></output><input id="dim" type="range" min="0" max="4" step="1"><div class="ends"><span>15 秒</span><span>无限制</span></div>
@@ -42,42 +45,49 @@ $('scan').onclick=startScan;$('networks').onchange=e=>{if(e.target.value){$('ssi
 $('wifi').onsubmit=async e=>{e.preventDefault();let b=new URLSearchParams(new FormData(e.target));if(await send('/api/wifi',b)){e.target.elements.password.value='';connecting=true;submittedAt=Date.now();$('connection').dataset.state=1;$('connection').textContent='正在连接 '+b.get('ssid')+'…\n正在等待设备结果，请保持热点连接。';$('connect').disabled=true;$('connection').scrollIntoView({block:'center',behavior:'smooth'});refresh();}};
 $('display').onsubmit=e=>{e.preventDefault();let b=new URLSearchParams(new FormData(e.target));b.set('dim',dims[$('dim').value]);b.set('blank',blanks[$('blank').value]);send('/api/settings',b);};refresh();setInterval(refresh,1000);
 
-let aiSnapshot=null,aiPolling=false,aiRequest=0,aiSending=false,aiRevision='',aiHashApplied=false,aiModelLoaded=false,aiOnline=false;
-function aiChosen(){return aiSnapshot?.providers.find(p=>p.id===$('aiProvider').value);}
+let aiSnapshot=null,aiPolling=false,aiRequest=0,aiSending=false,aiOnline=false,aiDirty=false,aiDraftGeneration=-1,aiConflict=false,aiLastAction='',aiAutoTest=false,aiTestPending=false,aiTestRevision=0,aiWatchingTest=false;
+function aiChosen(){return aiSnapshot;}
+function aiFill(){const p=aiChosen();if(!p)return;$('aiModelId').value=p.model;$('aiUrl').value=p.url;$('aiKey').value='';aiDirty=false;aiConflict=false;aiDraftGeneration=aiSnapshot.generation;}
 function aiRender(){
-const p=aiChosen();if(!p)return;const available=p.available===true,saved=p.configured,busy=pending||aiSending||aiSnapshot.busy||!!aiRequest;
-$('aiControls').hidden=!available;$('aiPlaceholder').hidden=available;
-$('aiProvider').disabled=busy;
-$('aiModelId').required=true;
-$('aiModel').textContent='指令理解 · 火山方舟大模型';
-$('aiSignup').href=p.url;
-$('aiKeyLabel').textContent='方舟 API Key';
-$('aiKeyNote').textContent='Key 不会回显；已保存时留空可只更新 Model ID。新 Key 会替换方舟 Key。';
-$('aiKey').required=!saved;
-$('aiState').textContent=!aiOnline?'暂时无法读取模型配置，请检查设备热点连接。':!aiSnapshot.ready?'模型配置服务不可用，请重启设备重试。':saved?'方舟 Key 已保存，待验证':'尚未配置豆包方舟';
-$('aiKey').disabled=busy||!available||!aiOnline;$('aiModelId').disabled=busy||!available||!aiOnline;
-$('aiSave').disabled=busy||!available||!aiOnline||!aiSnapshot.ready;
-$('aiSelect').disabled=busy||!available||!aiOnline||!aiSnapshot.ready||!p.configured||aiSnapshot.active===aiSnapshot.providers.indexOf(p);
-$('aiRemove').disabled=busy||!available||!aiOnline||!aiSnapshot.ready||!saved;
+const p=aiChosen();if(!p)return;const c=aiSnapshot.check,running=c&&c.state>=1&&c.state<=4,busy=pending||aiSending||aiSnapshot.busy||!!aiRequest,ready=aiOnline&&aiSnapshot.ready;
+
+$('aiKey').required=!p.configured;
+const active=aiSnapshot.active===0?p:null;
+$('aiState').textContent=!aiOnline?'暂时无法读取模型配置，请检查设备热点连接。':!aiSnapshot.ready?'模型配置服务不可用，请重启设备重试。':(active?'当前启用：'+active.model:'尚未启用模型')+'\n'+(p.configured?'已保存':'未配置')+'\n设备保存的模型：'+(p.model||'未填写')+'\n设备保存的 URL：'+(p.url||'未填写');
+for(const id of ['aiKey','aiModelId','aiUrl'])$(id).disabled=busy||!ready;
+$('aiSave').disabled=busy||!ready||aiConflict;
+$('aiReload').disabled=busy||!ready;
+$('aiTest').disabled=busy||!ready||!p.configured||running||aiTestPending||aiDirty;
+$('aiSelect').disabled=busy||!ready||!p.configured||aiSnapshot.active===0||aiDirty;
+$('aiRemove').disabled=busy||!ready||!p.configured;
+const matches=c&&c.provider===0;
+$('aiCheck').textContent=matches?c.label+'\n文本 '+(c.text?'通过':'未通过')+' · 工具 '+(c.tools?'通过':'未通过')+' · 音频 '+(c.audio?'通过':'未通过')+(c.error?'\n'+c.reason+'（'+c.error+'）':''):'未检测';
+$('aiCheck').dataset.state=matches&&c.state===5?2:matches&&(c.state===6||c.state===7)?3:running?1:0;
 }
 async function aiRefresh(){if(aiPolling)return;aiPolling=true;try{
-const r=await fetch('/api/ai',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();aiSnapshot=await r.json();aiOnline=true;
-let signature=aiSnapshot.providers.map(p=>p.id).join(',');if(signature!==aiRevision){aiRevision=signature;let select=$('aiProvider');select.replaceChildren();for(const p of aiSnapshot.providers)select.add(new Option(p.name+(p.available?'':' · 即将开放'),p.id));
-if(aiSnapshot.active<aiSnapshot.providers.length&&aiSnapshot.providers[aiSnapshot.active].available)select.selectedIndex=aiSnapshot.active;}
-if(!aiHashApplied){const requested=location.hash.match(/^#ai\/(\w+)$/)?.[1];if(requested&&aiSnapshot.providers.some(p=>p.id===requested))$('aiProvider').value=requested;aiHashApplied=true;}
-if(!aiModelLoaded){$('aiModelId').value=aiSnapshot.ark_model;aiModelLoaded=true;}
-if(aiRequest && aiSnapshot.completed>=aiRequest){aiRequest=0;if(!aiSnapshot.error)$('aiModelId').value=aiSnapshot.ark_model;$('aiMessage').textContent=aiSnapshot.error?'保存失败，原配置仍保留，请重试。':'配置已保存。模型连接与语音指令尚未接入，Key 有效性待验证。';}
-}catch(e){aiOnline=false;}finally{aiPolling=false;aiRender();}}
-async function aiSend(action){if(pending||aiSending||aiRequest||!aiChosen()?.available||!aiOnline)return;if(!token){$('aiMessage').textContent='正在连接设备，请稍后重试。';return;}
-if(action==='remove'&&!confirm('删除豆包方舟 API Key？'))return;
-const body=new URLSearchParams({provider:$('aiProvider').value,action});if(action==='save'){const key=$('aiKey').value.trim(),model=$('aiModelId').value.trim();
+const r=await fetch('/api/ai',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();const first=!aiSnapshot;aiSnapshot=await r.json();aiOnline=true;
+if(first)aiFill();
+if(aiRequest&&aiSnapshot.completed>=aiRequest){aiRequest=0;if(aiSnapshot.error){$('aiMessage').textContent='保存失败，原配置仍保留，请重试。';aiAutoTest=false;}else{aiFill();$('aiMessage').textContent=aiLastAction==='remove'?'API Key 已删除。':aiLastAction==='select'?'已设为当前模型。':'配置已保存并启用，正在准备能力检测。';}}
+else if(!aiSending&&!aiRequest&&aiSnapshot.generation!==aiDraftGeneration){if(aiDirty){aiConflict=true;$('aiMessage').textContent='设备配置已更新，你的输入仍保留。请重新读取后修改。';}else aiFill();}
+if(aiTestPending&&aiSnapshot.check?.revision>aiTestRevision)aiTestPending=false;
+if(aiWatchingTest&&!aiTestPending&&aiSnapshot.check?.state>=5){aiWatchingTest=false;$('aiMessage').textContent=aiSnapshot.check.state===5?'检测完成，本次语音指令样例通过。':aiSnapshot.check.state===7?'配置已变更，请重新检测。':'检测完成，请查看各项结果及错误原因。';}
+}catch(e){aiOnline=false;}finally{aiPolling=false;aiRender();}
+if(aiAutoTest&&!aiRequest&&!aiSending&&aiOnline){aiAutoTest=false;await aiSend('test');}}
+async function aiSend(action){if(pending||aiSending||aiRequest||!aiChosen()||!aiOnline)return;if(!token){$('aiMessage').textContent='正在连接设备，请稍后重试。';return;}
+if(action==='remove'&&!confirm('删除此配置的 API Key？'))return;
+const body=new URLSearchParams({action});if(action==='save'){
+const key=$('aiKey').value.trim(),model=$('aiModelId').value.trim(),url=$('aiUrl').value.trim();
 if(!key&&!aiChosen().configured){$('aiMessage').textContent='请先输入 API Key。';return;}
-if(!/^[A-Za-z0-9_.-]{1,96}$/.test(model)){$('aiMessage').textContent='请填写有效的 Model ID / Endpoint ID。';return;}
-body.set('key',key);body.set('model',model);}
-aiSending=true;aiRender();try{let r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body,signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('设备未接受配置，请检查 Key、Model ID 或稍后重试。');let result=await r.json();aiRequest=result.request;$('aiKey').value='';$('aiMessage').textContent='正在保存到设备…';}
-catch(e){$('aiMessage').textContent='提交失败：'+e.message+' 可等待状态刷新后重试。';}finally{aiSending=false;aiRender();aiRefresh();}}
-$('aiProvider').onchange=()=>{$('aiKey').value='';$('aiMessage').textContent='';aiRender();};
-$('aiForm').onsubmit=e=>{e.preventDefault();aiSend('save');};$('aiSelect').onclick=()=>aiSend('select');$('aiRemove').onclick=()=>aiSend('remove');
+if(!/^[!-~]{1,96}$/.test(model)){$('aiMessage').textContent='请填写有效的模型 ID / Endpoint ID。';return;}
+if(!/^https?:\/\/[^/?#@\s]+\/[^?#\s]+$/.test(url)||url.length>256||url.includes('\\')){$('aiMessage').textContent='请填写完整的 HTTP(S) 请求地址，包含接口路径。';return;}
+if(aiConflict){$('aiMessage').textContent='请先重新读取设备配置。';return;}
+body.set('key',key);body.set('model',model);body.set('url',url);}
+aiSending=true;aiLastAction=action;aiRender();try{const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-App-Token':token},body,signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error(await r.text());const result=await r.json();
+if(action==='test'){aiTestRevision=aiSnapshot.check?.revision||0;aiTestPending=true;aiWatchingTest=true;$('aiMessage').textContent='检测请求已提交，请等待设备结果。';}else{aiRequest=result.request;aiAutoTest=action==='save';$('aiKey').value='';$('aiMessage').textContent='正在保存到设备…';}}
+catch(e){aiAutoTest=false;aiTestPending=false;$('aiMessage').textContent='未确认操作成功，请刷新状态后重试。';}finally{aiSending=false;aiRender();if(!aiPolling)aiRefresh();}}
+for(const id of ['aiKey','aiModelId','aiUrl'])$(id).oninput=()=>{aiDirty=true;aiRender();};
+$('aiReload').onclick=()=>{if(aiDirty&&!confirm('放弃尚未保存的输入并重新读取？'))return;aiFill();aiRender();$('aiMessage').textContent='已读取设备保存的配置。';};
+$('aiForm').onsubmit=e=>{e.preventDefault();aiSend('save');};$('aiSelect').onclick=()=>aiSend('select');$('aiRemove').onclick=()=>aiSend('remove');$('aiTest').onclick=()=>aiSend('test');
 if(location.hash.startsWith('#ai'))$('ai').scrollIntoView();aiRefresh();setInterval(aiRefresh,1500);
 
 let gamesSnapshot=null,gamesPolling=false,gamesSending=false,gamesRequest=0,gamesDraftRevision=0,gamesDirty=false,gamesOnline=false,gamesConflict=false,gamesReloadRequested=false;

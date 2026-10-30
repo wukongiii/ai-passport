@@ -726,58 +726,84 @@ and saved-network reconnect at about 3.7 seconds; no panic/assert/reset loop.
 Connected free heap 99384 bytes, largest block 90112. Serial closed. Actual
 playback/replay remains Unverified pending user-triggered listening.
 
-## AI provider configuration
+## Unified model configuration
 
-The user confirmed successful offline playback after the codec wake fix.
-AI / Voice now opens a provider list (Doubao Seeduplex and OpenAI Realtime),
-plus the retained offline listening entry. Left/right choose and middle opens;
-middle hold returns one level, then from the list returns to the lobby.
-Each provider has its own registration/login QR code, phone configuration
-entry and activation action. No configured provider defaults to the onboarding
-list. The header, semantic hint colors and landscape rotations remain shared.
+AI / Voice offers one generic model configuration entry and the offline listening
+entry. Left/right choose and middle opens; middle hold returns one level.
+There are no provider presets, account links, platform placeholders or separate
+ASR credentials. Model settings remain separate from general application settings.
 
-Phone configuration opens the existing temporary password-free setup hotspot
-from AI / Voice. The first QR joins that hotspot; middle switches to a QR for
-`http://192.168.4.1/#ai/<provider>`. The mobile page has a separate AI / Voice
-section with provider selection, official account links, a password-type API
-key field, save-and-activate, activate-existing and delete actions. Account
-creation requires phone internet access; reconnect to the hotspot afterward.
-No cloud configuration is added to the general device settings.
+The phone form accepts the service's Model ID (up to 96 printable ASCII bytes),
+full API URL (up to 256 bytes) and API Key (up to 256 bytes). Model identifiers may
+contain slashes and colons. The URL must include the complete request path;
+HTTP(S) is supported without redirects, query strings or URL credentials.
+HTTPS uses the ESP-IDF root certificate bundle. HTTP sends credentials and audio
+in clear text. Saving activates the model; a blank Key retains the saved Key.
+Deleting the Key disables the model while keeping the Model ID and URL editable.
+Keys are never returned in snapshots, UI or HTTP responses.
 
-`main/ai/ai_config` owns provider metadata, bounded key validation and pure
-save/select/remove transitions. `ai_config_store` stores a versioned record in
-its own `ai_voice` NVS namespace. HTTP and UI only submit one bounded request;
-the existing network worker performs writes outside the button/LVGL context.
-Snapshots and HTTP responses contain configuration flags and request completion,
-never keys. Each provider retains its own key, saving activates that provider,
-and removing the active one falls back to another configured provider or none.
-A failed write/commit does not activate the new configuration. The portal waits
-for durable completion before reporting success. This is local configuration
-only: keys are marked saved / unverified, with no model request, ASR, scoring
-command transport or cloud audio implemented yet. Existing open-hotspot HTTP
-and ordinary NVS storage are retained for this personal-device increment.
+From the device model page, left opens phone setup, middle starts detection and
+right activates a saved inactive configuration. The first QR joins the temporary
+password-free hotspot; middle switches to `http://192.168.4.1/#ai`.
+The device shows the same saved Model ID, full scrolling URL, capability stages
+and error vocabulary as the phone portal. Polling preserves unsaved phone edits;
+if another client changes configuration, the form requires an explicit reload.
 
-Focused host tests cover form bounds and duplicate/invalid fields, independent
-provider keys, activation/removal, deferred storage, restart, corrupt records
-and write/commit errors. Finite real-LVGL previews cover both landscape rotations,
-provider onboarding, account/hotspot/configuration QR pages and offline listening.
-These checks do not establish phone camera scanning or on-board cloud access.
+`main/ai/ai_config` validates the form and implements pure save/select/remove
+transitions. `ai_config_store` serializes one bounded request through the network
+worker, outside button/LVGL callbacks. New settings use `ai_voice/connection`:
+`AI`, version 1, active byte, then fixed Key/Model ID/URL byte arrays of
+257/97/257 bytes. Old model records are ignored, with no migration or compatibility
+branches. Users must re-enter AI settings; Wi-Fi, match records and player names
+are unaffected. Failed writes/commits retain the active configuration. The phone
+waits for durable completion before reporting success.
 
-Configuration validation, 2026-10-29: full gate Build PASS, Host tests PASS.
-Both rotations decode all four preview QR payloads correctly (official account
-links, hotspot join and provider-targeted setup URL). Browser tests against a
-local simulated HTTP adapter passed separate provider saves, activation and
-removal at desktop and 390 px viewport widths; no real keys were used.
-LVGL preview peak remained 24728 bytes in the 32 KB pool.
+### Protocol and capability detection
+
+The single adapter implements non-streaming Chat Completions with bearer
+Authorization. The URL is supplied by the user, without provider-specific request
+parameters. Voice control additionally requires Base64 WAV `input_audio` and
+function tool calls in the same request. A model supporting text alone, a different
+audio envelope or only a Realtime API is insufficient for this path.
+
+Saving on the phone automatically requests detection; either UI can rerun it.
+`ai_probe` runs three isolated checks: an exact text response, a function call with
+known arguments, then a fixed synthetic recording identified through a tool call.
+Each successful stage is recorded; failure stops the sequence and preserves prior
+results and an error reason. Detection has a total 60-second budget, shares the
+voice worker so microphone requests cannot run concurrently, and never accesses
+the live game's executor. It uploads no microphone recording and changes no score.
+There are up to three small API requests, which may incur service charges.
+A pass verifies this sample only, not universal recognition or model compatibility.
+
+Configuration changes invalidate results and in-flight replies using a separate
+generation counter; ordinary status polling does not invalidate game sessions.
+Detection results are RAM-only and reset after reboot. Both UIs distinguish queued,
+text/tools/audio checking, pass, failure and stale states, including authorization,
+URL/model, rate-limit, network, memory, timeout and invalid-response reasons.
+
+Host checks cover validation, durable save/restart failures, capability state
+invalidation, generic request encoding, shared transport, and isolated detection
+success/partial failure/wrong audio. Browser checks use simulated HTTP responses;
+LVGL previews exercise both landscape rotations. Real-hotspot persistence,
+board RAM/stack peaks, actual model compatibility and audio comprehension still
+require device acceptance with the user's configured service.
+
+Validation, 2026-10-30: complete gate Build PASS and Host tests PASS; focused
+voice/probe tests also passed AddressSanitizer and UndefinedBehaviorSanitizer.
+Browser checks used a simulated API at desktop and 390 px widths, covering
+save/automatic detection, identifiers containing slash/colon, invalid URL rejection,
+draft preservation and reload confirmation. Both landscape LVGL previews passed
+with a 24792-byte peak in the 32 KB pool.
 Verified archive/full SHA-256:
-`build/firmware/d5d6f9792c58864da3baae5a0a78fd612ab16d321452b516d67e0c1653e92847/`.
-Matching ELF SHA-256: `5140fcba72554f3804bde8a96275fb39e230d804fa009e4a95acd8af1c6eb990`.
-Device tests PASS only for app-only write/hash at `0x10000`, matching startup,
-15-second observation and saved Wi-Fi reconnect around 3.8 seconds. Connected
-free heap 98156, largest block 86016; no panic/assert/reset loop. NVS and partition
-table were preserved, serial closed. Unverified: physical buttons/layout,
-phone-camera scanning and real-hotspot save/restart acceptance. No model API
-call or Key validity test was made. No commit or push.
+`build/firmware/51df873d40bf4ca6913b3e3ab8bff683479e834ddb6464796abfe4f5fd3710ad/`.
+Matching ELF SHA-256:
+`9ec0584c75da4213b9e578ce70f8e350c340898e12199ec9bb1ec5c900f919cd`.
+The connected ESP32-C3 partition table matched. Segmented bootloader/table/app
+flashing and hash verification passed, preserving NVS regions. The bounded
+15-second serial window captured no bytes, so startup is unverified. Device tests
+PASS applies only to writing/hash verification; screen/buttons, real-hotspot
+save/restart, actual model calls and RAM/stack peaks remain unverified.
 
 ## Per-game phone configuration
 
@@ -825,42 +851,6 @@ Verified archive/full SHA-256:
 Matching ELF SHA-256: `7cbb0794de6194f6590f256a629a60d1f3bfdd195e36ae04471a40b0ea3b8bd8`.
 
 
-## Doubao Ark configuration
-
-The model configuration entry enables Doubao Ark only. OpenAI remains a visible
-placeholder in both the phone portal and device list; its configuration actions
-are blocked in the UI and API. The phone form accepts an Ark API Key and Model ID
-or Endpoint ID. The editable default is `doubao-seed-2-0-mini-260428`. Leaving the
-Key empty retains the saved Key while updating the model. Public snapshots expose
-saved flags and model identifiers, never credentials. Onboarding links and the
-device account QR open the official Ark console.
-
-Standalone speech recognition configuration and functionality are removed. There
-is no speech service selector, Key input, saved flag or service request branch.
-Old service-qualified forms are rejected to prevent a cached page from overwriting
-the Ark Key. Offline speech synthesis and the listening test remain available.
-Remote model calls and score command execution are still pending.
-
-Version 3 of `ai_voice/models` stores stable provider Key slots followed by the
-Ark model identifier. Version-1 reads discard the retired speech Key; version-2
-reads retain the Ark Key/model and discard the separate speech Key. Other provider
-slots remain preserved but unavailable. Reads do not rewrite NVS; an explicit
-save writes version 3, omitting retired credentials. Failed writes/commits retain
-the active configuration. Existing match data and per-game names are unaffected.
-
-
-Validation, 2026-10-30: complete gate Build PASS, Host tests PASS. Tests cover
-Ark-only form handling, retired request rejection, v1/v2 migration, v3 reload,
-model-only updates and durable write failures. Mobile browser checks against a
-simulated HTTP adapter passed save/reload/model updates and placeholder behavior,
-and confirmed the standalone speech service controls are absent. Both landscape
-LVGL previews passed, including the retained offline listening page (24792-byte
-peak in the 32 KB pool). Device tests NOT RUN, as requested. Unverified: real
-hotspot save/restart, on-board rendering and remote model connectivity.
-Verified archive/full SHA-256:
-`build/firmware/73613efed398d27bf0eee8468ae37a05b6e2de3a87114eb9ea5226de26993ce8/`.
-Matching ELF SHA-256: `b51a4246517ca0a0bcfc4bba44352c0c4d44bb863d8f917b2206a8b3cd96c9b6`.
-
 ## Game and AI interaction contract
 
 The application registers optional `ai_game_ops_t` capabilities on a game module;
@@ -874,12 +864,12 @@ The boundary has three independent responsibilities:
 | --- | --- | --- |
 | Game adapter | Rules prompt, copied game context, neutral tools with JSON Schema, argument validation, authoritative execution result | Register `snapshot`, `stamp`, `execute` in `app_module_t.ai` |
 | Session coordinator | One pending request, locally assigned token, 30-second deadline, activation/revision/configuration binding, consume each reply once | `ai_session_begin`, `ai_session_finish`, `ai_session_cancel` |
-| Model adapter | Provider endpoint, body encoding, tool-call/text/clarification decoding | Register an `ai_model_adapter_t` in `ai_model_adapter` |
+| Model adapter | Body encoding, tool-call/text/clarification decoding | Register an `ai_model_adapter_t` in `ai_model_adapter` |
 
 A game never imports model configuration, provider protocols or network APIs.
 A provider never imports the score core or a particular game. The shared contract
 has only bounded context, instructions, tool schemas, calls, revisions and results.
-Tools are a neutral array of `{name, description, parameters}`; the Ark adapter
+Tools are a neutral array of `{name, description, parameters}`; the Chat Completions adapter
 adds its own `type/function` envelope. Reserved `ask_clarification({question})`
 normalizes to a clarification response without invoking the game executor.
 
@@ -934,7 +924,7 @@ are labels; changing a name invalidates in-flight interpretation without changin
 player identity. New-match/reset operations are not exposed in this first toolset.
 A game subpage refuses AI snapshots/execution while manual settings are open.
 
-The Ark adapter encodes one non-streaming text or audio turn and decodes exactly one text,
+The Chat Completions adapter encodes one non-streaming text or audio turn and decodes exactly one text,
 clarification or tool result. Multiple choices/tools, truncation, malformed JSON,
 duplicate keys, embedded NUL, invalid UTF-8 and oversized values are rejected.
 Tool-associated prose is discarded so it cannot claim the operation succeeded.
@@ -942,7 +932,7 @@ Ordinary model text is kept separate from authoritative operation results and
 cannot change game state. Worker credentials are excluded from bodies/snapshots;
 the HTTPS transport copies them into its authorization header.
 
-The initial contract increment supplied game execution and the Ark wire codec.
+The initial contract increment supplied game execution and the Chat Completions wire codec.
 The voice coordinator below now connects those contracts to microphone capture,
 direct HTTPS and the game controls; standalone ASR remains absent.
 
@@ -957,7 +947,7 @@ arguments at most 255 bytes, and output text at most 384 bytes, without truncati
 
 
 Initial contract validation, 2026-10-30: complete gate Build PASS, Host tests PASS. The
-integration test uses the real container, eight-ball module, score core and Ark
+integration test uses the real container, eight-ball module, score core and Chat Completions
 codec with simulated model responses. It verifies scoring/undo/query persistence,
 unknown/duplicate/invalid arguments, rule rejection, local edit/rename races,
 leave/reentry, cancellation, timeout, duplicate and wrong tokens, text and
@@ -976,7 +966,7 @@ Matching ELF SHA-256: `f5fc27269afe568582ca6ffdfc4e0b7da42b47c04065adf1c0dd1e907
 `main/ai/app_game_voice` coordinates the active game, audio worker and model
 adapter without importing game-specific score types. Games still validate and
 execute their own operations. No gateway, independent ASR service, wake word or
-continuous listening is used. Configure the Ark Key and an audio-capable Model ID
+continuous listening is used. Configure the API URL, Key and an audio-capable Model ID
 in the existing AI voice phone portal, connect Wi-Fi, then enter Chinese eight-ball.
 
 | State | Middle short | Middle long | Middle double |
@@ -1004,7 +994,7 @@ The app-lifetime worker has a 12 KB stack. Capture takes an exclusive lease from
 local TTS, wakes the codec at 16 kHz/16-bit mono, averages pairs to 8 kHz and stores
 IMA ADPCM in at most 40000 bytes of temporary RAM. Recording ends on Send or after
 10 seconds; silence and clips below 250 ms are rejected. Upload sequentially decodes
-to ordinary 8 kHz/16-bit mono WAV, Base64-encodes 768-byte chunks, and sends Ark's
+to ordinary 8 kHz/16-bit mono WAV, Base64-encodes 768-byte chunks, and sends the adapter's
 `input_audio` plus captured game context/tools. The provider never receives ADPCM.
 No recording is written to NVS or Flash. Heap allocations, HTTP errors, oversized
 responses and invalid tool results fail without changing scores. The text envelope

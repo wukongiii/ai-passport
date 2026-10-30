@@ -2,12 +2,12 @@
 #include "ai_config.h"
 #include "ai_provider.h"
 #include "voice_capture.h"
+#include "ai_transport.h"
+#include "ai_probe.h"
 #include "../app/app_strings.h"
 #include "../network/app_network.h"
 #include "../speech/app_speech.h"
 #include "bsp_audio.h"
-#include "esp_crt_bundle.h"
-#include "esp_http_client.h"
 #include <time.h>
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -35,69 +35,11 @@ static unsigned follow_model_revision;
 static bool follow_pending;
 
 static bool stop(void){portENTER_CRITICAL(&lock);bool yes=cancelled || esp_timer_get_time()>=worker_deadline;portEXIT_CRITICAL(&lock);return yes;}
+static bool transport_stop(void *unused){(void)unused;return stop();}
 static void publish(game_voice_state_t state,int error,const char *text){
  portENTER_CRITICAL(&lock);
  if(cancelled && (state==GAME_VOICE_RECORDING || state==GAME_VOICE_WAITING)){portEXIT_CRITICAL(&lock);return;}
  view.state=state;view.error=error;snprintf(view.text,sizeof(view.text),"%s",text?text:"");++view.revision;portEXIT_CRITICAL(&lock);
-}
-static bool write_all(esp_http_client_handle_t client,const char *data,size_t size){
- while(size&&!stop()){int n=esp_http_client_write(client,data,(int)size);if(n<=0)return false;data+=n;size-=(unsigned)n;}return !size&&!stop();
-}
-static size_t base64(const uint8_t *in,size_t count,char *out){
- static const char alphabet[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";size_t used=0;
- for(size_t i=0;i<count;i+=3){unsigned n=(unsigned)in[i]<<16;if(i+1<count)n|=(unsigned)in[i+1]<<8;if(i+2<count)n|=in[i+2];
- out[used++]=alphabet[(n>>18)&63];out[used++]=alphabet[(n>>12)&63];out[used++]=i+1<count?alphabet[(n>>6)&63]:'=';out[used++]=i+2<count?alphabet[n&63]:'=';}return used;
-}
-static esp_err_t upload(uint8_t *record,unsigned samples,unsigned selected,ai_reply_t *decoded){
- esp_err_t error=ESP_FAIL;char key[AI_KEY_CAPACITY]={0},model[AI_MODEL_CAPACITY]={0},auth[AI_KEY_CAPACITY+8]={0};
- if(!ai_config_credentials(selected,key,model)){free(record);return ESP_ERR_INVALID_STATE;}
- const ai_model_adapter_t *adapter=ai_model_adapter(ai_provider(selected)->id);
- ai_json_t *json=malloc(sizeof(*json));char *head=malloc(AI_BODY_CAPACITY),*tail=malloc(4096),*response=NULL;
- esp_http_client_handle_t client=NULL;
- if(!json||!head||!tail){error=ESP_ERR_NO_MEM;goto done;}
- ai_model_request_t request={model,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",&game};
- if(!adapter||!adapter->audio_parts||!adapter->audio_parts(json,&request,head,AI_BODY_CAPACITY,tail,4096)){error=ESP_ERR_INVALID_ARG;goto done;}
- free(json);json=NULL; // Codec workspace is not retained during the TLS handshake.
- esp_http_client_config_t config={.url=adapter->endpoint,.method=HTTP_METHOD_POST,.timeout_ms=5000,.crt_bundle_attach=esp_crt_bundle_attach,.buffer_size=1024,.buffer_size_tx=1024,.disable_auto_redirect=true};
- client=esp_http_client_init(&config);if(!client){error=ESP_ERR_NO_MEM;goto done;}
- snprintf(auth,sizeof(auth),"Bearer %s",key);esp_http_client_set_header(client,"Authorization",auth);esp_http_client_set_header(client,"Content-Type","application/json");
- unsigned wav_size=44+samples*2;size_t total=strlen(head)+4*((wav_size+2)/3)+strlen(tail);
- error=esp_http_client_open(client,(int)total);memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));if(error!=ESP_OK)goto done;
- esp_http_client_set_timeout_ms(client,1000);
- if(!write_all(client,head,strlen(head))){error=ESP_FAIL;goto done;}
- free(head);head=NULL; // Retain the small provider suffix until audio is uploaded.
- uint8_t wav[44],pcm[768];char encoded[1024];voice_wav_header(wav,samples);voice_adpcm_t decoder={0};unsigned position=0;
- while(position<wav_size&&!stop()){
-  size_t count=wav_size-position;if(count>sizeof(pcm))count=sizeof(pcm);
-  for(size_t i=0;i<count;++i,++position){
-   if(position<44)pcm[i]=wav[position];
-   else{unsigned at=position-44;if(!(at&1)){unsigned sample=at/2;uint8_t n=(record[sample/2]>>(4*(sample&1)))&15;int16_t value=voice_capture_decode(&decoder,n);pcm[i]=(uint8_t)value;wav[0]=(uint8_t)((uint16_t)value>>8);}else pcm[i]=wav[0];}
-  }
-  if(!write_all(client,encoded,base64(pcm,count,encoded))){error=ESP_FAIL;goto done;}
- }
- free(record);record=NULL;
- if(stop()){error=ESP_ERR_INVALID_STATE;goto done;}
- if(!write_all(client,tail,strlen(tail))){error=ESP_FAIL;goto done;}
- free(head);head=NULL;free(tail);tail=NULL;
- int64_t headers;
- do{headers=esp_http_client_fetch_headers(client);}while(headers==-ESP_ERR_HTTP_EAGAIN&&!stop());
- if(headers<0||stop()){error=ESP_FAIL;goto done;}
- response=malloc(AI_RESPONSE_CAPACITY+1);if(!response){error=ESP_ERR_NO_MEM;goto done;}
- int status=esp_http_client_get_status_code(client);if(status!=200){error=status;goto done;}
- size_t used=0;
- while(!stop()){
-  int n=esp_http_client_read(client,response+used,AI_RESPONSE_CAPACITY-used);
-  if(n==-ESP_ERR_HTTP_EAGAIN)continue;
-  if(n<0){error=ESP_FAIL;goto done;}
-  if(!n){if(esp_http_client_is_complete_data_received(client))break;vTaskDelay(pdMS_TO_TICKS(10));continue;}
-  used+=(unsigned)n;if(used==AI_RESPONSE_CAPACITY){error=ESP_ERR_INVALID_SIZE;goto done;}
- }
- esp_http_client_cleanup(client);client=NULL;
- json=malloc(sizeof(*json));if(!json){error=ESP_ERR_NO_MEM;goto done;}
- response[used]=0;error=!stop()&&adapter->decode(json,response,used,decoded)?ESP_OK:ESP_ERR_INVALID_RESPONSE;
-done:
- if(client)esp_http_client_cleanup(client);
- memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));free(json);free(head);free(tail);free(response);free(record);return error;
 }
 static void process_job(void){
   portENTER_CRITICAL(&lock);bool have=queued;queued=false;portEXIT_CRITICAL(&lock);if(!have)return;
@@ -124,12 +66,22 @@ finish:
   if(lease){esp_err_t slept=bsp_audio_sleep();if(error==ESP_OK)error=slept;app_speech_capture_release();}
   if(error==ESP_OK&&!stop()){
    if(!audible||capture.samples<VOICE_RATE/4){error=ESP_ERR_INVALID_ARG;publish(GAME_VOICE_ERROR,error,TXT_GAME_VOICE_EMPTY);}
-   else{publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);error=upload(record,capture.samples,provider,&reply);record=NULL;}
+   else{publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={transport_stop,NULL};error=ai_transport_request(provider,&game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",record,capture.samples,&reply,&control);record=NULL;}
   }
   free(record);
   portENTER_CRITICAL(&lock);completed=true;view.error=error;portEXIT_CRITICAL(&lock);
 }
-static void run(void *arg){(void)arg;for(;;){ulTaskNotifyTake(pdTRUE,portMAX_DELAY);process_job();}}
+static void run(void *arg){(void)arg;for(;;){
+ ulTaskNotifyTake(pdTRUE,pdMS_TO_TICKS(100));process_job();
+ portENTER_CRITICAL(&lock);bool busy=occupied;portEXIT_CRITICAL(&lock);
+ if(!busy){
+ portENTER_CRITICAL(&lock);busy=occupied;if(!busy)occupied=true;portEXIT_CRITICAL(&lock);
+ if(!busy){unsigned selected,generation;if(ai_check_take(&selected,&generation)){
+  ai_probe_run(selected,generation);
+ }
+  portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);
+ }}
+}}
 bool app_game_voice_start(void){if(worker)return true;if(xTaskCreate(run,"game_voice",12288,NULL,3,&worker)==pdPASS)return true;worker=NULL;return false;}
 void app_game_voice_snapshot(game_voice_snapshot_t *out){portENTER_CRITICAL(&lock);*out=view;portEXIT_CRITICAL(&lock);}
 void app_game_voice_cancel(void){
@@ -168,10 +120,12 @@ bool app_game_voice_input(ai_game_target_t target,unsigned slot,app_gesture_t ge
  if(!config.ready||config.active>=AI_PROVIDER_COUNT||!config.configured[config.active]||!ai_model_adapter(ai_provider(config.active)->id)){publish(GAME_VOICE_ERROR,0,TXT_GAME_VOICE_NEED_KEY);return true;}
  if(network.state!=APP_NET_CONNECTED){publish(GAME_VOICE_ERROR,0,TXT_GAME_VOICE_NEED_WIFI);return true;}
  if(!worker){publish(GAME_VOICE_ERROR,ESP_ERR_NO_MEM,TXT_GAME_VOICE_REJECT);return true;}
- if(ai_session_begin(&session,target,esp_timer_get_time(),&game,&job_token)!=AI_FLOW_OK)return true;
- if(!(follow_pending&&follow_model_revision==config.revision&&follow_revision==r&&follow_configuration==c&&follow_activation==target.activation&&follow_module==target.module_id))followup[0]=0;
+ portENTER_CRITICAL(&lock);unavailable=occupied||completed;if(!unavailable)occupied=true;portEXIT_CRITICAL(&lock);
+ if(unavailable)return true;
+ if(ai_session_begin(&session,target,esp_timer_get_time(),&game,&job_token)!=AI_FLOW_OK){portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);return true;}
+ if(!(follow_pending&&follow_model_revision==config.generation&&follow_revision==r&&follow_configuration==c&&follow_activation==target.activation&&follow_module==target.module_id))followup[0]=0;
  snprintf(worker_input,sizeof(worker_input),"%s",followup);
- follow_pending=false;provider=config.active;config_revision=config.revision;active_target=target;
+ follow_pending=false;provider=config.active;config_revision=config.generation;active_target=target;
  portENTER_CRITICAL(&lock);cancelled=false;send_requested=false;completed=false;occupied=true;queued=true;worker_deadline=session.deadline;view.milliseconds=0;portEXIT_CRITICAL(&lock);
  publish(GAME_VOICE_STARTING,0,TXT_GAME_VOICE_START);xTaskNotifyGive(worker);return true;
 }
@@ -179,7 +133,7 @@ bool app_game_voice_tick(ai_game_target_t target,int64_t now){
  static unsigned rendered;game_voice_snapshot_t s;app_game_voice_snapshot(&s);
  if(s.state!=GAME_VOICE_IDLE && (target.ops!=active_target.ops || target.context!=active_target.context || target.module_id!=active_target.module_id || target.activation!=active_target.activation))app_game_voice_cancel();
  if(session.pending){uint32_t r,c;ai_config_snapshot_t config;ai_config_snapshot(&config);
-  if(target.ops!=active_target.ops||target.module_id!=active_target.module_id||target.activation!=active_target.activation||!target.ops||!target.ops->stamp(target.context,&r,&c)||r!=session.revision||c!=session.configuration||config.revision!=config_revision||now>=session.deadline)app_game_voice_cancel();
+  if(target.ops!=active_target.ops||target.module_id!=active_target.module_id||target.activation!=active_target.activation||!target.ops||!target.ops->stamp(target.context,&r,&c)||r!=session.revision||c!=session.configuration||config.generation!=config_revision||now>=session.deadline)app_game_voice_cancel();
  }
  portENTER_CRITICAL(&lock);bool done=completed;completed=false;if(done)occupied=false;bool was_cancelled=cancelled;int error=view.error;portEXIT_CRITICAL(&lock);
  if(done){

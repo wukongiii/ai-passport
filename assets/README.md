@@ -126,3 +126,13 @@ RAM. The unchanged Espressif MIT license is retained at
 [`components/esp_tts/LICENSE`](../components/esp_tts/LICENSE); use is restricted
 to Espressif products. The matching C3 library provenance is recorded in
 [`components/esp_tts/README.md`](../components/esp_tts/README.md).
+
+### Model capability test audio
+
+`voices/capability_probe.adpcm` is a synthetic Chinese utterance identifying the
+left player, generated locally using macOS speech synthesis for this project's
+API test. It contains no personal recording. The 8 kHz mono IMA ADPCM payload has
+15707 samples (7854 bytes); initial predictor/index are zero. It is decoded into
+standard 16-bit PCM WAV only during the isolated capability check. It is embedded
+in application rodata; no microphone capture or game change occurs in this check.
+SHA-256: `24e5b93fbd0171868ccc21cf0b560188add9ef8541f13034ecac12a9a18e6a0f`.

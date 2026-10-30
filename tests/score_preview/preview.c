@@ -48,6 +48,9 @@ bool app_speech_say(const char *text){(void)text;speech_preview.state=SPEECH_WAI
 void app_speech_stop(void){speech_preview.state=SPEECH_IDLE;speech_preview.pending=false;++speech_preview.revision;}
 void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_preview;}
 static ai_config_snapshot_t ai_preview={.ready=true,.active=AI_PROVIDER_NONE};
+static ai_check_snapshot_t check_preview={.provider=AI_PROVIDER_NONE};
+void ai_check_snapshot(ai_check_snapshot_t *out){*out=check_preview;}
+bool ai_check_request(unsigned p){check_preview.provider=p;check_preview.state=AI_CHECK_QUEUED;++check_preview.revision;return true;}
 void ai_config_snapshot(ai_config_snapshot_t *out){*out=ai_preview;}
 bool ai_config_submit(const ai_config_request_t *r,unsigned *id){(void)id;ai_preview.active=r->provider;ai_preview.revision++;return true;}
 static game_preferences_snapshot_t game_names={.ready=true,.revision=1};
@@ -155,18 +158,19 @@ int main(void) {
     for(unsigned r=0;r<2;++r){
         app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=4;
         ai_preview=(ai_config_snapshot_t){.ready=true,.active=AI_PROVIDER_NONE,.revision=ai_preview.revision+1};
+        strcpy(ai_preview.model,"test-audio-model");strcpy(ai_preview.url,"https://example.com/v1/chat/completions");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-empty-90" : "ai-empty-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-provider-90" : "ai-provider-270");
-        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-doubao-qr-90" : "ai-doubao-qr-270");
-        app_container_input(&app,1,APP_GESTURE_SHORT);snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-862C");
+        app_container_input(&app,0,APP_GESTURE_SHORT);snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-862C");
         app_container_tick(&app,100);app_ui_render(&app,91,"");capture(r ? "ai-hotspot-90" : "ai-hotspot-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-phone-90" : "ai-phone-270");
         ai_preview.configured[0]=true;ai_preview.active=0;++ai_preview.revision;app_container_tick(&app,200);
         app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");capture(r ? "ai-saved-90" : "ai-saved-270");
+        check_preview=(ai_check_snapshot_t){.provider=0,.state=AI_CHECK_PASS,.text=true,.tools=true,.audio=true,.revision=check_preview.revision+1};
+        app_container_tick(&app,210);app_ui_render(&app,91,"");capture(r ? "ai-check-pass-90" : "ai-check-pass-270");
+        check_preview.state=AI_CHECK_FAILED;check_preview.audio=false;check_preview.error=401;++check_preview.revision;app_container_tick(&app,220);app_ui_render(&app,91,"");capture(r ? "ai-check-fail-90" : "ai-check-fail-270");
+        check_preview=(ai_check_snapshot_t){.provider=AI_PROVIDER_NONE,.revision=check_preview.revision+1};
         app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");
-        app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
-        app_container_input(&app,0,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-openai-placeholder-90" : "ai-openai-placeholder-270");
-        app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r ? "voice-ready-90" : "voice-ready-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);assert(speech_preview.state==SPEECH_WAITING);
