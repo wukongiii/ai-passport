@@ -2,7 +2,7 @@
 #include "ai_contract.h"
 #include "ai_json.h"
 
-typedef struct { const char *model; const char *input; const ai_game_snapshot_t *game; } ai_model_request_t;
+typedef struct { const char *model; const char *input; const ai_game_snapshot_t *game; const char *assistant_name,*assistant_prompt; } ai_model_request_t;
 /* Credentials are a transport concern, deliberately excluded from wire bodies.
  * Worker owns a provider instance/workspace and returns one normalized reply. */
 typedef struct {

@@ -61,6 +61,9 @@ run_static_checks() {
         tests/test_ai_config.c main/ai/ai_config.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_ai_config"
     "${test_dir}/test_ai_config"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/speech_stubs -Itests/score_stubs -Itests/bsp_stubs \
+        tests/test_ai_persona.c main/ai/ai_persona.c main/ai/ai_persona_store.c main/ai/ai_config.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_ai_persona"
+    "${test_dir}/test_ai_persona"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain -Itests/speech_stubs -Itests/score_stubs -Itests/bsp_stubs \
         tests/test_ai_config_store.c main/ai/ai_config_store.c main/ai/ai_config.c main/network/app_network_model.c main/app/app_preferences.c main/ui/app_layout.c -o "${test_dir}/test_ai_config_store"
     "${test_dir}/test_ai_config_store"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \

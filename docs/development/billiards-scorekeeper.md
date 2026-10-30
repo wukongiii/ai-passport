@@ -958,7 +958,9 @@ for ambiguous players. Capability tools are:
 
 | Tool | Arguments | Local behavior |
 | --- | --- | --- |
-| `adjust_score` | `player_id`, `delta` (-1 or +1), `expected_revision` | Resolve stable ID and dispatch the normal score command |
+| `adjust_score` | `player_id`, `delta` (nonzero -35..35), `expected_revision` | Resolve stable ID and dispatch the normal score command |
+| `set_score` | `player_id`, `score`, `expected_revision` | Set one absolute score |
+| `set_scores` | `p1`, `p2`, `expected_revision` | Set both scores atomically |
 | `undo_last` | `expected_revision` | Use existing bounded undo history |
 | `get_score` | `expected_revision` | Read authoritative scores; does not save or change revision |
 | `ask_clarification` | `question` | Return text; never alter gameplay |
@@ -967,7 +969,7 @@ For example, `adjust_score({"player_id":"p1","delta":1,"expected_revision":7})`
 can increase the left player's rack wins only if the locally captured request is
 still current. Both the local stamp and the tool revision must match; wildcard
 revision, extra/duplicate arguments, unknown players/tools, fractional values,
-underflow and post-win increments are rejected. AI commands share the module's
+underflow, scores above the current race target and simultaneous winners are rejected. Explicit corrections may reopen a finished match. AI commands share the module's
 manual `dispatch` path, UI feedback, delayed persistence and undo history. Names
 are labels; changing a name invalidates in-flight interpretation without changing
 player identity. New-match/reset operations are not exposed in this first toolset.
@@ -986,12 +988,12 @@ The voice coordinator below now connects those contracts to microphone capture,
 direct HTTPS and the game controls; standalone ASR remains absent.
 
 All buffers are bounded; JSON parsing uses a caller-owned workspace without heap
-allocation. In the 64-bit host test the snapshot is 3600 bytes, parser workspace
-6168 bytes, session 56 bytes, reply 688 bytes and completion 396 bytes. These host
+allocation. In the 64-bit host test the snapshot is 4624 bytes, parser workspace
+8216 bytes, session 56 bytes, reply 688 bytes and completion 396 bytes. These host
 sizes are not an ESP32 heap measurement. Large mailboxes/workspaces must be static
 or explicitly allocated by the worker, never placed on the app stack. The
-eight-ball argument parser is owner-only and uses one static workspace. Text request envelopes
-and response bodies are each limited to 6144 bytes; audio is uploaded in chunks; text input is at most 511 bytes,
+eight-ball argument parser allocates its workspace only during command validation. Text request envelopes
+are limited to 8192 bytes and response bodies to 6144 bytes; audio is uploaded in chunks; text input is at most 511 bytes,
 arguments at most 255 bytes, and output text at most 384 bytes, without truncation.
 
 
@@ -1048,7 +1050,7 @@ to ordinary 8 kHz/16-bit mono WAV, Base64-encodes 768-byte chunks, and sends the
 `input_audio` plus captured game context/tools. The provider never receives ADPCM.
 No recording is written to NVS or Flash. Heap allocations, HTTP errors, oversized
 responses and invalid tool results fail without changing scores. The text envelope
-uses bounded 6144-byte head and 4096-byte suffix scratch, then trims both to
+uses bounded 8192-byte head and 4096-byte suffix scratch, then trims both to
 the encoded lengths before TLS. Text-only requests allocate no suffix. The
 response limit remains 6144 bytes. The
 parser is released before TLS and recreated after HTTP cleanup; the recording is
@@ -1295,3 +1297,48 @@ include 257 (memory), 259 (network/configuration state), 260 (response/data size
 server errors; unknown errors retain a generic retry message and their code.
 Neither service replies nor secrets are included in error labels. The model
 snapshot and gameplay state continue to use numeric codes for diagnostics.
+
+
+### Application assistant context and flexible scoring
+
+Assistant identity and behavior are application context, separate from model
+connections. The phone portal has independent expandable blocks for network,
+games, assistant, model connections, and display/audio. The assistant block edits
+the nickname (default product assistant name, 1-12 supported characters) and
+behavior prompt (1-1536 UTF-8 bytes). It also displays the actual game rules,
+six tool definitions, message ordering and fixed generation parameters. Rules
+and tools are read-only: editing behavior cannot create unsupported operations.
+The default behavior asks for one short Chinese reply, direct execution when
+player/amount are clear, and one short clarification only for missing information.
+
+The device AI/voice list exposes assistant settings by holding the left key.
+Its page shows the saved nickname and opens hotspot phone setup with the middle
+key. Assistant and model QR links open their respective blocks. Nicknames and
+multiline behavior prompts are edited on the phone; both device rotations use
+the same independent assistant page and persisted identity.
+
+Assistant settings use `ai_persona/persona`, a version-1 1578-byte record, without
+changing model, Wi-Fi or score storage. HTTP submits a revision-checked mailbox;
+the network worker writes and commits NVS before reporting success. Failed writes
+retain the previous active values and the phone draft. Switching or deleting a
+model leaves assistant context intact. Changing assistant context cancels pending
+commands and discards clarification follow-up from the previous context.
+
+Requests combine editable behavior, JSON-quoted assistant identity, game rules,
+current game context and user input. Model adapters only encode/decode the shared
+contract and know no score rules. Explicit bulk/absolute changes each create one
+undo entry; invalid two-player updates are atomic rejections. For example, adding
+three units executes `adjust_score(delta=3)`, and replacing 5:3 executes one
+`set_scores(p1=5,p2=3)`, within the current race target. No extra confirmation is
+needed when the player and amount are unambiguous.
+
+Finite validation covers persistence/failure recovery, stale settings/results,
+bulk changes and undo, absolute and atomic corrections, and maximum escaped
+prompt/request framing. JSON uses 256 bounded nodes; tools allow 3072 bytes.
+Encoding scratch and persona copies are freed before TLS; audio framing is
+trimmed to used lengths. The maximum escaped persona test uses a 4846-byte head
+and 3056-byte suffix. These host sizes do not establish device heap headroom.
+A real browser with mocked endpoints verified independent folding, multiline save,
+reload, draft preservation and 390-pixel width without console errors. Real LVGL
+previews cover the assistant page in both rotations. Physical buttons, real NVS
+persistence, model understanding and speech remain device acceptance checks.

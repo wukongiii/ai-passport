@@ -1,4 +1,5 @@
 #include "ai/ai_session.h"
+#include "ai/ai_persona.h"
 #include "ai/ai_provider.h"
 #include "ai/ai_json.h"
 #include "app/app_container.h"
@@ -36,7 +37,7 @@ static const char *tool_response(const char *name,const char *args){
 }
 static void begin(void){
     assert(ai_session_begin(&session,app_container_ai_target(&app),100,&snapshot,&token)==AI_FLOW_OK);
-    ai_model_request_t r={"ep-test","张三加一分",&snapshot};
+    ai_model_request_t r={"ep-test","张三加一分",&snapshot,NULL,NULL};
     assert(adapter->encode(&workspace,&r,body,sizeof(body)));
 }
 static ai_flow_result_t finish(const char *name,const char *args){
@@ -64,12 +65,12 @@ int main(void){
     assert(ai_session_begin(&session,app_container_ai_target(&app),0,&snapshot,&token)==AI_FLOW_UNAVAILABLE);
     app_container_input(&app,1,APP_GESTURE_SHORT);begin();
     assert(strstr(snapshot.context,"张三")&&strstr(snapshot.context,"rack_wins")&&strstr(snapshot.context,"\"race_to\":10"));
-    ai_model_request_t bounded={"ep-test","test",&snapshot};char smallbody[32];
+    ai_model_request_t bounded={"ep-test","test",&snapshot,NULL,NULL};char smallbody[32];
     assert(!adapter->encode(&workspace,&bounded,smallbody,sizeof(smallbody)));
     assert(strstr(body,"ep-test")&&strstr(body,"adjust_score")&&strstr(body,"张三加一分"));
     // Audio framing must remain valid JSON, retain tools, and escape clarification.
     char head[AI_BODY_CAPACITY],tail[4096],audio_body[AI_BODY_CAPACITY+4096];
-    ai_model_request_t audio={"ep-test","回答上个问题：张三 \"加分\"",&snapshot};
+    ai_model_request_t audio={"ep-test","回答上个问题：张三 \"加分\"",&snapshot,NULL,NULL};
     assert(adapter->audio_parts(&workspace,&audio,head,sizeof(head),tail,sizeof(tail)));
     snprintf(audio_body,sizeof(audio_body),"%sUklGRg==%s",head,tail);
     assert(ai_json_parse(&workspace,audio_body,strlen(audio_body)));
@@ -88,7 +89,7 @@ int main(void){
     app_container_tick(&app,1000);assert(saves==1&&saved.state.points[0]==1&&saved.history_count==1);
     // Query never changes revision or history.
     begin();assert(finish("get_score","{\"expected_revision\":1}")==AI_FLOW_OK&&completion.executed&&!completion.changed);
-    begin();assert(finish("adjust_score","{\"player_id\":\"p1\",\"delta\":2,\"expected_revision\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID&&!completion.executed);
+    begin();assert(finish("adjust_score","{\"player_id\":\"p1\",\"delta\":0,\"expected_revision\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID&&!completion.executed);
     begin();assert(finish("adjust_score","{\"player_id\":\"张三\",\"delta\":1,\"expected_revision\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID);
     begin();assert(finish("adjust_score","{\"player_id\":\"p1\",\"delta\":1,\"expected_revision\":1,\"extra\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_INVALID);
     begin();assert(finish("new_match","{\"expected_revision\":1}")==AI_FLOW_OK&&completion.game_result==AI_GAME_UNSUPPORTED);
@@ -128,6 +129,41 @@ int main(void){
     // Pure scoring adapter retains rule authority at match end.
     score_session_t end;score_session_init(&end);end.state.points[0]=10;
     score_command_t c;ai_tool_call_t call={.name="adjust_score",.arguments="{\"player_id\":\"p2\",\"delta\":1,\"expected_revision\":0}"};
-    assert(eight_ai_command(&end,&call,&c)==AI_GAME_OK&&score_dispatch(&end,&c)==SCORE_FINISHED);
+    assert(eight_ai_command(&end,&call,&c)==AI_GAME_OK&&score_dispatch(&end,&c)==SCORE_OK);
+    // Explicit bulk and absolute corrections are one atomic undo entry.
+    score_session_t flex;score_session_init(&flex);
+    call=(ai_tool_call_t){.name="adjust_score",.arguments="{\"player_id\":\"p1\",\"delta\":3,\"expected_revision\":0}"};
+    assert(eight_ai_command(&flex,&call,&c)==AI_GAME_OK&&score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==3&&flex.history_count==1);
+    c=(score_command_t){.type=SCORE_CMD_UNDO,.expected_revision=1};assert(score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==0);
+    call=(ai_tool_call_t){.name="set_scores",.arguments="{\"p1\":5,\"p2\":3,\"expected_revision\":2}"};
+    assert(eight_ai_command(&flex,&call,&c)==AI_GAME_OK&&score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==5&&flex.state.points[1]==3&&flex.history_count==1);
+    score_session_t before=flex;
+    call=(ai_tool_call_t){.name="set_scores",.arguments="{\"p1\":10,\"p2\":10,\"expected_revision\":3}"};
+    assert(eight_ai_command(&flex,&call,&c)==AI_GAME_OK&&score_dispatch(&flex,&c)==SCORE_INVALID&&!memcmp(&before,&flex,sizeof(flex)));
+    call=(ai_tool_call_t){.name="set_score",.arguments="{\"player_id\":\"p1\",\"score\":8,\"expected_revision\":3}"};
+    assert(eight_ai_command(&flex,&call,&c)==AI_GAME_OK&&score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==8);
+    c=(score_command_t){.type=SCORE_CMD_UNDO,.expected_revision=4};assert(score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==5&&flex.state.points[1]==3);
+    // Configured persona is an independent system message for text and audio.
+    assert(eight_ai_snapshot(&flex,&names.eight,1,&snapshot));
+    bounded.assistant_name="逗宝";bounded.assistant_prompt="短句回复\n按用户指定数值修改";
+    assert(adapter->encode(&workspace,&bounded,body,sizeof(body))&&strstr(body,"逗宝")&&strstr(body,"assistant_name")&&strstr(body,"短句回复"));
+    audio.assistant_name=bounded.assistant_name;audio.assistant_prompt=bounded.assistant_prompt;
+    assert(adapter->audio_parts(&workspace,&audio,head,sizeof(head),tail,sizeof(tail))&&strstr(head,"逗宝"));
+    // Accepted worst-case UTF-8 names, escaped prompts/model IDs and follow-up text fit.
+    char maximum_prompt[AI_PERSONA_PROMPT_CAPACITY],maximum_input[AI_INPUT_CAPACITY],maximum_model[97];
+    memset(maximum_prompt,'"',sizeof(maximum_prompt)-1);maximum_prompt[sizeof(maximum_prompt)-1]=0;
+    memset(maximum_input,'"',sizeof(maximum_input)-1);maximum_input[sizeof(maximum_input)-1]=0;
+    memset(maximum_model,'"',sizeof(maximum_model)-1);maximum_model[sizeof(maximum_model)-1]=0;
+    strcpy(names.eight.players[0],"一二三四五六七八");strcpy(names.eight.players[1],"二三四五六七八九");
+    assert(eight_ai_snapshot(&flex,&names.eight,UINT32_MAX,&snapshot));
+    bounded=(ai_model_request_t){maximum_model,maximum_input,&snapshot,names.eight.players[0],maximum_prompt};
+    assert(adapter->encode(&workspace,&bounded,body,sizeof(body)));
+    assert(adapter->audio_parts(&workspace,&bounded,head,sizeof(head),tail,sizeof(tail)));
+    printf("Maximum escaped persona request: head=%zu tail=%zu body_limit=%u bytes\n",strlen(head),strlen(tail),AI_BODY_CAPACITY);
+    // Invalid absolute and negative corrections cannot leak partial state.
+    before=flex;c=(score_command_t){.type=SCORE_CMD_SET_POINTS,.player=1,.amount=11,.expected_revision=flex.revision};
+    assert(score_dispatch(&flex,&c)==SCORE_INVALID&&!memcmp(&before,&flex,sizeof(flex)));
+    c=(score_command_t){.type=SCORE_CMD_ADJUST_POINTS,.player=0,.amount=-3,.expected_revision=flex.revision};
+    assert(score_dispatch(&flex,&c)==SCORE_OK&&flex.state.points[0]==2);
     puts("AI provider wire format, game capabilities, real scoring/undo, identity, stale/cancel/replay and bounded JSON: PASS");
 }

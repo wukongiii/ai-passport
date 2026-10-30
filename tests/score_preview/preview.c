@@ -13,6 +13,7 @@
 #include "network/app_network.h"
 #include "speech/app_speech.h"
 #include "ai/ai_config.h"
+#include "ai/ai_persona.h"
 #include "app/app_preferences_store.h"
 #include "app/app_strings.h"
 #include "games/eight_module.h"
@@ -55,6 +56,8 @@ static ai_config_snapshot_t ai_preview={.ready=true,.active=AI_PROVIDER_NONE};
 static ai_check_snapshot_t check_preview={.provider=AI_PROVIDER_NONE};
 void ai_check_snapshot(unsigned provider,ai_check_snapshot_t *out){*out=check_preview;out->provider=provider;}
 bool ai_check_request(unsigned p){check_preview.provider=p;check_preview.state=AI_CHECK_QUEUED;++check_preview.revision;return true;}
+unsigned ai_persona_revision(void){return 1;}
+void ai_persona_snapshot(ai_persona_snapshot_t *out){memset(out,0,sizeof(*out));strcpy(out->value.name,"逗宝");out->revision=1;}
 void ai_config_snapshot(ai_config_snapshot_t *out){*out=ai_preview;}
 bool ai_config_submit(const ai_config_request_t *r,unsigned *id){(void)id;ai_preview.active=r->provider;ai_preview.revision++;return true;}
 static game_preferences_snapshot_t game_names={.ready=true,.revision=1};
@@ -179,6 +182,8 @@ int main(void) {
         app.rotation=r ? APP_ROTATION_90 : APP_ROTATION_270;app.page=APP_PAGE_HOME;app.focus=4;
         ai_preview=(ai_config_snapshot_t){.ready=true,.active=AI_PROVIDER_NONE,.revision=ai_preview.revision+1};
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-empty-90" : "ai-empty-270");
+        app_container_input(&app,0,APP_GESTURE_LONG);app_ui_render(&app,91,"");capture(r ? "ai-assistant-90" : "ai-assistant-270");
+        app_container_input(&app,1,APP_GESTURE_LONG);
         app_container_input(&app,1,APP_GESTURE_SHORT);assert(net_preview.portal);snprintf(net_preview.ap_name,sizeof(net_preview.ap_name),"Billiards-862C");
         app_container_tick(&app,100);app_ui_render(&app,91,"");capture(r ? "ai-hotspot-90" : "ai-hotspot-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);app_ui_render(&app,91,"");capture(r ? "ai-phone-90" : "ai-phone-270");

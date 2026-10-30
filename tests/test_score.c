@@ -39,7 +39,7 @@ static void rules_and_history(void) {
     c = command(SCORE_CMD_ADJUST_POINTS);
     c.amount = -1;
     assert(score_dispatch(&s, &c) == SCORE_INVALID); // zero cannot go negative
-    c.amount = 2;
+    c.amount = 36;
     assert(score_dispatch(&s, &c) == SCORE_INVALID);
     c = command(SCORE_CMD_AWARD_FRAME);
     c.player = 2;

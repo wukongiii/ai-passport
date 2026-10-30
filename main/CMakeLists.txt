@@ -10,6 +10,8 @@ idf_component_register(
          "ai/ai_provider.c"
          "ai/ai_chat_completions.c"
          "ai/ai_config.c"
+         "ai/ai_persona.c"
+         "ai/ai_persona_store.c"
          "ai/ai_config_store.c"
          "speech/speech_model.c"
          "speech/app_speech.c"

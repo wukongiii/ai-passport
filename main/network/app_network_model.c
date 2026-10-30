@@ -3,7 +3,7 @@
 #include <string.h>
 static int hex(char c){if(c>='0'&&c<='9')return c-'0';if(c>='a'&&c<='f')return c-'a'+10;if(c>='A'&&c<='F')return c-'A'+10;return -1;}
 bool app_net_form_value(const char *form,const char *key,char *out,size_t capacity){
-    if(!form || !key || !out || !capacity || strlen(form)>APP_NET_FORM_MAX)return false;
+    if(!form || !key || !out || !capacity || strlen(form)>5120)return false;
     bool found=false;size_t keylen=strlen(key);out[0]=0;
     for(const char *p=form;*p;){
         const char *end=strchr(p,'&');if(!end)end=p+strlen(p);
@@ -14,7 +14,7 @@ bool app_net_form_value(const char *form,const char *key,char *out,size_t capaci
             for(const char *v=eq+1;v<end;++v){int c=(unsigned char)*v;
                 if(c=='%'){if(end-v<3 || hex(v[1])<0 || hex(v[2])<0)return false;c=hex(v[1])*16+hex(v[2]);v+=2;}
                 else if(c=='+')c=' ';
-                if(!c || c<32 || c==127 || n+1>=capacity)return false;
+                if(!c || (c<32 && !(strcmp(key,"prompt")==0 && (c=='\n'||c=='\t'))) || c==127 || n+1>=capacity)return false;
                 out[n++]=(char)c;
             }out[n]=0;
         }p=*end ? end+1 : end;

@@ -6,7 +6,7 @@
 /* Bounded JSON reader/writer, independent of model/IDF and without allocation.
  * Nodes borrow input until the caller finishes decoding. Duplicate members,
  * malformed UTF-8/escapes, embedded NUL and excessive nesting are rejected. */
-enum { AI_JSON_NODES=192, AI_JSON_DEPTH=12 };
+enum { AI_JSON_NODES=256, AI_JSON_DEPTH=12 };
 typedef enum { AJ_OBJECT,AJ_ARRAY,AJ_STRING,AJ_NUMBER,AJ_BOOL,AJ_NULL } ai_json_type_t;
 typedef struct { ai_json_type_t type; size_t start,end; int next,count; } ai_json_node_t;
 typedef struct { const char *text; size_t size; int count; ai_json_node_t nodes[AI_JSON_NODES]; } ai_json_t;

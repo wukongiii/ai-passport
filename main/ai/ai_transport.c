@@ -1,5 +1,6 @@
 #include "ai_transport.h"
 #include "ai_config.h"
+#include "ai_persona.h"
 #include "ai_response_filter.h"
 #include "ai_provider.h"
 #include "voice_capture.h"
@@ -59,11 +60,15 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
  const ai_model_adapter_t *adapter=ai_model_adapter(ai_provider(selected)->id);
  const char *stage="request buffers";
  ai_json_t *json=malloc(sizeof(*json));char *head=malloc(AI_BODY_CAPACITY),*tail=record?malloc(4096):NULL,*response=NULL;
- esp_http_client_handle_t client=NULL;
+ esp_http_client_handle_t client=NULL;ai_persona_snapshot_t *persona=NULL;
  if(!json||!head||(record&&!tail)){error=ESP_ERR_NO_MEM;goto done;}
- ai_model_request_t request={model,input,game};
+ ai_model_request_t request={.model=model,.input=input,.game=game};
+ if(control&&control->use_persona){
+  persona=malloc(sizeof(*persona));if(!persona){error=ESP_ERR_NO_MEM;goto done;}
+  ai_persona_snapshot(persona);request.assistant_prompt=persona->value.prompt;request.assistant_name=persona->value.name;
+ }
  if(!adapter||(record?(!adapter->audio_parts||!adapter->audio_parts(json,&request,head,AI_BODY_CAPACITY,tail,4096)):!adapter->encode(json,&request,head,AI_BODY_CAPACITY))){error=ESP_ERR_INVALID_ARG;goto done;}
- free(json);json=NULL; // Codec workspace is not retained during the TLS handshake.
+ free(persona);persona=NULL;free(json);json=NULL; // Codec workspace is not retained during the TLS handshake.
  size_t head_size=strlen(head),tail_size=tail?strlen(tail):0;
  char *trimmed=realloc(head,head_size+1);if(trimmed)head=trimmed;
  if(tail){trimmed=realloc(tail,tail_size+1);if(trimmed)tail=trimmed;}
@@ -117,5 +122,5 @@ esp_err_t ai_transport_request(unsigned selected,const ai_game_snapshot_t *game,
 done:
  if(error!=ESP_OK)ESP_LOGW(TRANSPORT_TAG,"Request failed: stage=%s error=%d free=%u largest=%u",stage,error,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
  if(client)esp_http_client_cleanup(client);
- memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));free(json);free(head);free(tail);free(response);voice_buffer_release(record);memory_stage("request cleanup");return error;
+ memset(key,0,sizeof(key));memset(auth,0,sizeof(auth));free(persona);free(json);free(head);free(tail);free(response);voice_buffer_release(record);memory_stage("request cleanup");return error;
 }

@@ -21,6 +21,8 @@ typedef enum {
     SCORE_CMD_ADJUST_POINTS,
     SCORE_CMD_UNDO,
     SCORE_CMD_NEW_MATCH,
+    SCORE_CMD_SET_POINTS,
+    SCORE_CMD_SET_SCORES,
 } score_command_type_t;
 
 /* A future speech adapter resolves player identity before enqueueing a command.
@@ -34,6 +36,7 @@ typedef struct {
     uint8_t player_count;
     uint8_t target;
     uint32_t expected_revision;
+    int32_t scores[SCORE_MAX_PLAYERS]; // Atomic absolute score correction.
 } score_command_t;
 
 typedef enum {

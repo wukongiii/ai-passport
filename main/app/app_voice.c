@@ -2,21 +2,23 @@
 #include "app_error.h"
 #include "app_strings.h"
 #include "../ai/ai_config.h"
+#include "../ai/ai_persona.h"
 #include "../network/app_network.h"
 #include "../speech/app_speech.h"
 #include "../ui/app_header.h"
 #include "lvgl.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 LV_FONT_DECLARE(score_font_16);
 LV_FONT_DECLARE(score_font_14);
 LV_FONT_DECLARE(network_font_14);
 static const char *const phrases[]={TXT_VOICE_PHRASE_SCORE,TXT_VOICE_PHRASE_WIN,TXT_VOICE_PHRASE_NUMBERS};
-typedef enum { MODELS,PROVIDER,PHONE_JOIN,PHONE_OPEN,LISTEN } page_t;
+typedef enum { MODELS,PROVIDER,PHONE_JOIN,PHONE_OPEN,LISTEN,ASSISTANT } page_t;
 static struct {
     bool active,rejected,portal_requested,portal_seen;
     unsigned focus,selected,provider;
-    bool phone_from_list;
+    bool phone_from_list,assistant_phone;
     page_t page;
     ai_config_snapshot_t config;
     ai_check_snapshot_t check;
@@ -27,10 +29,15 @@ static lv_obj_t *content,*rows[3],*detail,*note,*qr,*qr_text,*model_label,*url_l
 static int mounted=-1;
 static char qr_value[192];
 static bool qr_failed;
-static void snapshots(void){ai_config_snapshot(&state.config);app_network_snapshot(&state.network);app_speech_snapshot(&state.speech);ai_check_snapshot(state.provider,&state.check);}
+static char assistant_name[AI_PERSONA_NAME_CAPACITY];
+static unsigned assistant_revision;
+static void snapshots(void){
+    unsigned revision=ai_persona_revision();
+    if(revision!=assistant_revision || !*assistant_name){ai_persona_snapshot_t *p=malloc(sizeof(*p));if(p){ai_persona_snapshot(p);snprintf(assistant_name,sizeof(assistant_name),"%s",p->value.name);assistant_revision=p->revision;free(p);}}
+ai_config_snapshot(&state.config);app_network_snapshot(&state.network);app_speech_snapshot(&state.speech);ai_check_snapshot(state.provider,&state.check);}
 static bool enter(void *c,app_rotation_t r){
     (void)c;(void)r;state.active=true;state.rejected=false;state.page=MODELS;
-    snapshots();state.focus=0;state.provider=0;state.phone_from_list=false;return true;
+    snapshots();state.focus=0;state.provider=0;state.phone_from_list=false;state.assistant_phone=false;return true;
 }
 static bool leave(void *c){(void)c;state.active=false;app_speech_stop();return true;}
 static void bindings(void *c,app_bindings_t *b){
@@ -39,10 +46,13 @@ static void bindings(void *c,app_bindings_t *b){
         app_actions_register(b,0,APP_GESTURE_SHORT,500,TXT_APP_PREVIOUS,true,APP_ACTION_NAVIGATE);
         app_actions_register(b,1,APP_GESTURE_SHORT,501,TXT_APP_ENTER,true,APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,502,TXT_APP_NEXT,true,APP_ACTION_NAVIGATE);
+        app_actions_register(b,0,APP_GESTURE_LONG,514,TXT_AI_ASSISTANT,true,APP_ACTION_NAVIGATE);
         return;
     }
     app_actions_register(b,1,APP_GESTURE_LONG,503,TXT_APP_BACK,true,APP_ACTION_BACK);
-    if(state.page==LISTEN){
+    if(state.page==ASSISTANT){
+        app_actions_register(b,1,APP_GESTURE_SHORT,508,TXT_AI_PHONE,true,APP_ACTION_CONFIRM);
+    }else if(state.page==LISTEN){
         app_actions_register(b,0,APP_GESTURE_SHORT,504,TXT_VOICE_CHANGE,true,APP_ACTION_NAVIGATE);
         bool playing=state.speech.pending||state.speech.state==SPEECH_PLAYING||state.speech.state==SPEECH_STOPPING;
         app_actions_register(b,1,APP_GESTURE_SHORT,505,playing?TXT_VOICE_STOP:TXT_VOICE_PLAY,true,playing?APP_ACTION_CANCEL:APP_ACTION_CONFIRM);
@@ -59,19 +69,23 @@ static void bindings(void *c,app_bindings_t *b){
     }
 }
 static void phone(void){
+    if(state.page==MODELS || state.page==PROVIDER)state.assistant_phone=false;
     if(state.page==MODELS || state.page==PROVIDER)state.phone_from_list=state.page==MODELS;
     state.page=PHONE_JOIN;state.portal_seen=state.network.portal;
     state.portal_requested=app_network_portal(true);state.rejected=!state.portal_requested;
 }
 static app_module_effect_t input(void *c,app_rotation_t r,unsigned slot,app_gesture_t g){
     (void)c;
-    if(g==APP_GESTURE_LONG && slot==1 && state.page!=MODELS){
-        if(state.page==LISTEN){app_speech_stop();state.page=MODELS;}
+    if(g==APP_GESTURE_LONG && slot==0 && state.page==MODELS){state.page=ASSISTANT;}
+    else if(g==APP_GESTURE_LONG && slot==1 && state.page!=MODELS){
+        if(state.page==ASSISTANT){state.page=MODELS;}
+        else if(state.page==LISTEN){app_speech_stop();state.page=MODELS;}
         else state.page=state.page==PROVIDER || state.phone_from_list ? MODELS : PROVIDER;
         state.rejected=false;
     }else if(g==APP_GESTURE_SHORT){
         state.rejected=false;
         switch(state.page){
+        case ASSISTANT:if(slot==1){state.assistant_phone=true;state.phone_from_list=true;phone();}break;
         case MODELS:{
             unsigned entries[AI_PROVIDER_COUNT+2],count=0;entries[count++]=AI_PROVIDER_NONE;
             for(unsigned i=0;i<AI_PROVIDER_COUNT;++i)if(state.config.configured[i])entries[count++]=i;
@@ -107,10 +121,10 @@ static app_module_effect_t input(void *c,app_rotation_t r,unsigned slot,app_gest
     snapshots();return (app_module_effect_t){false,r};
 }
 static bool tick(void *c,int64_t now){
-    (void)c;(void)now;unsigned config=state.config.revision,network=state.network.revision,speech=state.speech.revision,check=state.check.revision;
+    (void)c;(void)now;unsigned config=state.config.revision,network=state.network.revision,speech=state.speech.revision,check=state.check.revision,persona=assistant_revision;
     snapshots();
     if(state.network.portal)state.portal_seen=true;
-    return state.active && (config!=state.config.revision || network!=state.network.revision || speech!=state.speech.revision || check!=state.check.revision);
+    return state.active && (config!=state.config.revision || network!=state.network.revision || speech!=state.speech.revision || check!=state.check.revision || persona!=assistant_revision);
 }
 static lv_obj_t *label(lv_obj_t *p,int x,int y,int w,uint32_t color){
     lv_obj_t *o=lv_label_create(p);lv_obj_set_pos(o,x,y);lv_obj_set_width(o,w);
@@ -173,6 +187,10 @@ static void render(void *c,const app_module_view_t *v){
         }
         return;
     }
+    if(state.page==ASSISTANT){
+        app_header_context(TXT_AI_ASSISTANT);lv_obj_set_style_text_font(detail,&network_font_14,0);lv_label_set_text(detail,assistant_name);
+        lv_label_set_text(qr_text,TXT_AI_ASSISTANT_HELP);lv_label_set_text(note,TXT_AI_ASSISTANT_SCOPE);return;
+    }
     if(state.page==LISTEN){
         app_header_context(TXT_VOICE_TITLE);lv_label_set_text(qr_text,phrases[state.selected]);
         static const char *const messages[]={TXT_VOICE_READY,TXT_VOICE_WAIT,TXT_VOICE_PLAYING,TXT_VOICE_DONE,TXT_VOICE_FAILED,TXT_VOICE_STOPPING};
@@ -200,7 +218,7 @@ static void render(void *c,const app_module_view_t *v){
         if(ready){
             char data[192];
             if(state.page==PHONE_JOIN)snprintf(data,sizeof(data),"WIFI:T:nopass;S:%s;;",state.network.ap_name);
-            else snprintf(data,sizeof(data),"http://192.168.4.1/#ai");
+            else snprintf(data,sizeof(data),state.assistant_phone ? "http://192.168.4.1/#assistant" : "http://192.168.4.1/#ai");
             lv_label_set_text_fmt(detail,"%s\n%u s",state.page==PHONE_JOIN ? state.network.ap_name : "192.168.4.1",state.network.seconds_left);
             lv_label_set_text(note,state.page==PHONE_JOIN ? TXT_APP_NETWORK_OPEN : TXT_AI_PHONE_NOTE);code(data);
         }else{

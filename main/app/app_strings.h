@@ -186,3 +186,7 @@
 #define TXT_ERROR_UPLOAD "上传失败，请重试"
 #define TXT_ERROR_WAIT_TIMEOUT "等待模型超时，请重试"
 #define TXT_ERROR_WAIT "等待模型失败，请重试"
+
+#define TXT_AI_ASSISTANT "助手设置"
+#define TXT_AI_ASSISTANT_HELP "手机修改昵称与提示词"
+#define TXT_AI_ASSISTANT_SCOPE "应用上下文 · 独立于模型"

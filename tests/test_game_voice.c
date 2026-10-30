@@ -123,6 +123,9 @@ static void codec_tests(void){
  memset(pcm,0,sizeof(pcm));assert(!voice_capture_audible(pcm,16000));
  char b64[8];assert(base64((const uint8_t *)"ab",2,b64)==4&&!memcmp(b64,"YWI=",4));
 }
+void ai_persona_snapshot(ai_persona_snapshot_t *out){*out=(ai_persona_snapshot_t){.value={.name="逗宝",.prompt="Keep replies short."}};}
+static unsigned persona_generation=1;
+unsigned ai_persona_revision(void){return persona_generation;}
 int main(void){
  codec_tests();assert(app_game_voice_start());
  assert(!app_game_voice_input(target,1,APP_GESTURE_SHORT));assert(!app_game_voice_input(target,1,APP_GESTURE_LONG));
@@ -143,6 +146,7 @@ int main(void){
  begin_job();assert(app_game_voice_input(target,1,APP_GESTURE_LONG));process_job();drain();assert(view.state==GAME_VOICE_IDLE&&executes==1);
  begin_job();process_job();++revision;drain();assert(executes==1); // local score race
  begin_job();process_job();++cfg.generation;drain();assert(executes==1); // model change race
+ begin_job();process_job();++persona_generation;drain();assert(executes==1); // assistant edit race
  begin_job();process_job();++target.activation;drain();assert(executes==1); // leave/reenter
  begin_job();process_job();now=session.deadline;drain();assert(executes==1);
  fail_alloc=1;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(!occupied&&!job&&!session.pending&&view.error==ESP_ERR_NO_MEM);
@@ -176,6 +180,7 @@ int main(void){
  send_early=true;begin_job();process_job();drain();assert(view.state==GAME_VOICE_REPLY&&executes==1&&spoken==3);
  response="{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"ask_clarification\",\"arguments\":\"{\\\"question\\\":\\\"给哪位选手加一分？\\\"}\"}}]}}]}";
  send_early=true;begin_job();process_job();drain();assert(follow_pending&&strstr(followup,"给哪位"));begin_job();assert(strstr(worker_input,"给哪位"));app_game_voice_cancel();process_job();drain();
+ begin_job();process_job();drain();assert(follow_pending);++persona_generation;begin_job();assert(!*worker_input);app_game_voice_cancel();process_job();drain();
  printf("Tracked voice allocations: peak=%zu, last TLS=%zu, no retained allocations\n",peak_bytes,tls_bytes);
  puts("Game voice actual worker: routing, audio codec, 10s bound, HTTP framing/retry, reply mailbox, stale/cancel, failures and clarification PASS");
 }

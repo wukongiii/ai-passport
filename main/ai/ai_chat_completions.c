@@ -10,6 +10,15 @@ static bool encode_common(ai_json_t *workspace,const ai_model_request_t *r,char 
     ai_json_writer_t w;ai_json_writer(&w,out,capacity);
     ai_json_write(&w,"{\"model\":");ai_json_quote(&w,r->model);
     ai_json_write(&w,",\"messages\":[{\"role\":\"system\",\"content\":");
+    if(r->assistant_prompt){
+        ai_json_quote(&w,r->assistant_prompt);
+        ai_json_write(&w,"},{\"role\":\"system\",\"content\":");
+        char identity[128];ai_json_writer_t identity_writer;ai_json_writer(&identity_writer,identity,sizeof(identity));
+        ai_json_write(&identity_writer,"{\"assistant_name\":");ai_json_quote(&identity_writer,r->assistant_name?r->assistant_name:"");ai_json_write(&identity_writer,"}");
+        if(!identity_writer.ok)return false;
+        ai_json_quote(&w,identity);
+        ai_json_write(&w,"},{\"role\":\"system\",\"content\":");
+    }
     ai_json_quote(&w,r->game->instructions);
     ai_json_write(&w,"},{\"role\":\"system\",\"content\":");ai_json_quote(&w,r->game->context);
     ai_json_write(&w,"},{\"role\":\"user\",\"content\":");ai_json_quote(&w,r->input);

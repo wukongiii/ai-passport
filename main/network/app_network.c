@@ -2,6 +2,8 @@
 #include "network_history_store.h"
 #include "app_network_socket.h"
 #include "../ai/ai_config.h"
+#include "../ai/ai_persona.h"
+#include "../games/eight_ai.h"
 #include "../games/game_preferences.h"
 #include "cJSON.h"
 #include "esp_event.h"
@@ -207,6 +209,37 @@ static esp_err_t ai_submit(httpd_req_t *r){
     char result[48];snprintf(result,sizeof(result),"{\"request\":%u}",id);
     httpd_resp_set_status(r,"202 Accepted");httpd_resp_set_type(r,"application/json");return httpd_resp_send(r,result,HTTPD_RESP_USE_STRLEN);
 }
+static esp_err_t persona_status(httpd_req_t *r){
+    if(!local_request(r,false))return deny(r);
+    ai_persona_snapshot_t *s=malloc(sizeof(*s));if(!s)return ESP_ERR_NO_MEM;ai_persona_snapshot(s);
+    cJSON *body=cJSON_CreateObject();if(!body){free(s);return ESP_ERR_NO_MEM;}
+    cJSON_AddStringToObject(body,"name",s->value.name);cJSON_AddStringToObject(body,"prompt",s->value.prompt);
+    cJSON_AddStringToObject(body,"default_prompt",ai_persona_default_prompt());
+    cJSON_AddStringToObject(body,"game_prompt",eight_ai_instructions());
+    cJSON_AddStringToObject(body,"tools",eight_ai_tools());
+    cJSON_AddBoolToObject(body,"ready",s->ready);cJSON_AddBoolToObject(body,"busy",s->busy);
+    cJSON_AddNumberToObject(body,"revision",s->revision);cJSON_AddNumberToObject(body,"submitted",s->submitted);
+    cJSON_AddNumberToObject(body,"completed",s->completed);cJSON_AddNumberToObject(body,"error",s->error);free(s);
+    char *json=cJSON_PrintUnformatted(body);cJSON_Delete(body);if(!json)return ESP_ERR_NO_MEM;
+    headers(r);httpd_resp_set_type(r,"application/json");esp_err_t e=httpd_resp_send(r,json,HTTPD_RESP_USE_STRLEN);cJSON_free(json);return e;
+}
+static esp_err_t persona_submit(httpd_req_t *r){
+    if(!local_request(r,true))return deny(r);
+    // Percent-encoded UTF-8 may take three wire bytes per stored byte.
+    enum {LIMIT=3*(AI_PERSONA_PROMPT_CAPACITY+AI_PERSONA_NAME_CAPACITY)+96};
+    if(!r->content_len||r->content_len>LIMIT)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Invalid request size");
+    char *form=calloc(1,r->content_len+1);ai_persona_t *p=malloc(sizeof(*p));
+    if(!form||!p){free(form);free(p);return ESP_ERR_NO_MEM;}
+    size_t got=0;while(got<r->content_len){int n=httpd_req_recv(r,form+got,r->content_len-got);if(n<=0){free(form);free(p);return ESP_FAIL;}got+=(unsigned)n;}
+    char revision[12];unsigned expected=0,id=0;
+    bool ok=!memchr(form,0,got)&&app_net_form_value(form,"name",p->name,sizeof(p->name))&&
+        app_net_form_value(form,"prompt",p->prompt,sizeof(p->prompt))&&app_net_form_value(form,"revision",revision,sizeof(revision))&&*revision;
+    if(ok)for(const char *c=revision;*c;++c){if(*c<'0'||*c>'9'||expected>(UINT32_MAX-(unsigned)(*c-'0'))/10){ok=false;break;}expected=expected*10+(unsigned)(*c-'0');}
+    if(ok)ok=ai_persona_submit(p,expected,&id);
+    free(form);free(p);headers(r);
+    if(!ok)return httpd_resp_send_err(r,HTTPD_400_BAD_REQUEST,"Invalid name/prompt, stale settings or device busy");
+    char reply[48];snprintf(reply,sizeof(reply),"{\"request\":%u}",id);httpd_resp_set_status(r,"202 Accepted");httpd_resp_set_type(r,"application/json");return httpd_resp_send(r,reply,HTTPD_RESP_USE_STRLEN);
+}
 static esp_err_t games_status(httpd_req_t *r){
     if(!local_request(r,false))return deny(r);
     game_preferences_snapshot_t s;game_preferences_snapshot(&s);
@@ -322,13 +355,14 @@ static void poll_dns(void){
 }
 static esp_err_t start_http(void){
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();cfg.stack_size=8192;cfg.max_open_sockets=3;
-    cfg.max_uri_handlers=10;
+    cfg.max_uri_handlers=12;
     cfg.lru_purge_enable=true;cfg.recv_wait_timeout=3;cfg.send_wait_timeout=3;
     esp_err_t e=httpd_start(&server,&cfg);if(e!=ESP_OK)return e;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=root}, {.uri="/api/status",.method=HTTP_GET,.handler=status},
         {.uri="/api/wifi",.method=HTTP_POST,.handler=submit}, {.uri="/api/settings",.method=HTTP_POST,.handler=submit},
         {.uri="/api/networks",.method=HTTP_GET,.handler=networks}, {.uri="/api/scan",.method=HTTP_POST,.handler=request_scan},
+        {.uri="/api/persona",.method=HTTP_GET,.handler=persona_status}, {.uri="/api/persona",.method=HTTP_POST,.handler=persona_submit},
         {.uri="/api/ai",.method=HTTP_GET,.handler=ai_status}, {.uri="/api/ai",.method=HTTP_POST,.handler=ai_submit},
         {.uri="/api/games",.method=HTTP_GET,.handler=games_status}, {.uri="/api/games",.method=HTTP_POST,.handler=games_submit}};
     for(unsigned i=0;i<sizeof(routes)/sizeof(routes[0]);++i){e=httpd_register_uri_handler(server,&routes[i]);if(e!=ESP_OK){httpd_stop(server);server=NULL;return e;}}
@@ -458,12 +492,13 @@ static esp_err_t initialize(void){
     return ESP_OK;
 }
 static void worker(void *arg){
-    (void)arg;ai_config_service_init();game_preferences_service_init();app_network_snapshot_t s={0};esp_err_t e=initialize();s.saved=app_net_credentials_valid(&saved);
+    (void)arg;ai_config_service_init();ai_persona_init();game_preferences_service_init();app_network_snapshot_t s={0};esp_err_t e=initialize();s.saved=app_net_credentials_valid(&saved);
     if(e!=ESP_OK){s.state=APP_NET_FAILED;s.error=e;cleanup();publish(&s);vTaskDelete(NULL);return;}
     s.ready=true;if(s.saved){e=connect_to(&saved,false,&s);if(e!=ESP_OK)failed(&s,e);}publish(&s);
     ESP_LOGI(TAG,"Network service ready; free heap=%u largest=%u",(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     for(;;){
         ai_config_service_poll();
+        ai_persona_poll();
         game_preferences_service_poll();
         command_t c={0};bool change=false;
         if(xQueueReceive(commands,&c,pdMS_TO_TICKS(250))==pdTRUE){change=true;e=ESP_OK;

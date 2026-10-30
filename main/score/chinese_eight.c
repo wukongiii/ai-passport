@@ -20,14 +20,24 @@ static int winner(const score_state_t *s) {
 }
 
 static score_result_t apply(score_state_t *s, const score_command_t *c) {
-    if (c->type != SCORE_CMD_AWARD_FRAME && c->type != SCORE_CMD_ADJUST_POINTS)
-        return SCORE_UNSUPPORTED;
-    if (c->player >= s->player_count ||
-        (c->amount != 1 && !(c->type == SCORE_CMD_ADJUST_POINTS && c->amount == -1)))
-        return SCORE_INVALID;
-    if (c->amount > 0 && winner(s) >= 0) return SCORE_FINISHED;
-    if (c->amount < 0 && s->points[c->player] == 0) return SCORE_INVALID;
-    s->points[c->player] += c->amount;
+    if(c->type==SCORE_CMD_SET_SCORES){
+        for(unsigned i=0;i<2;++i)s->points[i]=c->scores[i];
+        return valid(s) ? SCORE_OK : SCORE_INVALID;
+    }
+    if(c->type!=SCORE_CMD_AWARD_FRAME && c->type!=SCORE_CMD_ADJUST_POINTS && c->type!=SCORE_CMD_SET_POINTS)return SCORE_UNSUPPORTED;
+    if(c->player>=s->player_count)return SCORE_INVALID;
+    if(c->type==SCORE_CMD_SET_POINTS){
+        s->points[c->player]=c->amount;
+        return valid(s) ? SCORE_OK : SCORE_INVALID;
+    }
+    if(c->type==SCORE_CMD_AWARD_FRAME && c->amount!=1)return SCORE_INVALID;
+    if(!c->amount || c->amount < -s->target || c->amount>s->target)return SCORE_INVALID;
+    // Explicit corrections may reopen a finished match; awarding a rack cannot.
+    if(c->type==SCORE_CMD_AWARD_FRAME && winner(s)>=0)return SCORE_FINISHED;
+    int64_t next=(int64_t)s->points[c->player]+c->amount;
+    if(next<0 || next>s->target)return SCORE_INVALID;
+    s->points[c->player]=(int32_t)next;
+    if(!valid(s))return SCORE_INVALID;
     return SCORE_OK;
 }
 

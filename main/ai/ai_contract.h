@@ -5,8 +5,8 @@
 
 /* The shared boundary has no provider, transport, scoring or UI dependency.
  * Each game supplies JSON context/tools and validates its own tool arguments. */
-enum { AI_CONTEXT_CAPACITY=1536, AI_TOOLS_CAPACITY=2048, AI_ARGUMENTS_CAPACITY=256,
-       AI_TOOL_NAME_CAPACITY=40, AI_TEXT_CAPACITY=385, AI_BODY_CAPACITY=6144,
+enum { AI_CONTEXT_CAPACITY=1536, AI_TOOLS_CAPACITY=3072, AI_ARGUMENTS_CAPACITY=256,
+       AI_TOOL_NAME_CAPACITY=40, AI_TEXT_CAPACITY=385, AI_BODY_CAPACITY=8192,
        AI_RESPONSE_CAPACITY=6144, AI_INPUT_CAPACITY=512 };
 typedef struct {
     uint32_t revision,configuration;

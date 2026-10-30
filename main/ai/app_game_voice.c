@@ -1,4 +1,5 @@
 #include "app_game_voice.h"
+#include "ai_persona.h"
 #include "../app/app_error.h"
 #include "ai_config.h"
 #include "ai_provider.h"
@@ -29,7 +30,7 @@ typedef struct {ai_game_snapshot_t game;ai_reply_t reply;ai_transport_stage_t st
  * finish before this mailbox can be freed, including cancellation paths. */
 static voice_job_t *job;
 static bool queued,cancelled,send_requested,completed,occupied;
-static unsigned provider,config_revision;
+static unsigned provider,config_revision,persona_revision;
 static uint32_t job_token;
 static ai_game_target_t active_target;
 static char followup[AI_INPUT_CAPACITY];
@@ -37,7 +38,7 @@ static int64_t worker_deadline;
 static char worker_input[AI_INPUT_CAPACITY];
 static uint32_t follow_revision,follow_configuration,follow_activation;
 static uint16_t follow_module;
-static unsigned follow_model_revision;
+static unsigned follow_model_revision,follow_persona_revision;
 static bool follow_pending;
 
 static bool stop(void){portENTER_CRITICAL(&lock);bool yes=cancelled || esp_timer_get_time()>=worker_deadline;portEXIT_CRITICAL(&lock);return yes;}
@@ -79,7 +80,7 @@ finish:
    if(!audible||capture.samples<VOICE_RATE/4){error=ESP_ERR_INVALID_ARG;publish(GAME_VOICE_ERROR,error,TXT_GAME_VOICE_EMPTY);}
    else{
     ESP_LOGI(TAG,"Upload recording: bytes=%u free=%u largest=%u",(unsigned)record.size,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={.cancel=transport_stop,.stage=&job->stage};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",&record,capture.samples,&job->reply,&control);}
+    publish(GAME_VOICE_WAITING,0,TXT_GAME_VOICE_WAIT);ai_transport_control_t control={.cancel=transport_stop,.stage=&job->stage,.use_persona=true};error=ai_transport_request(provider,&job->game,worker_input[0]?worker_input:"Understand the recorded request and choose an operation or ask for clarification.",&record,capture.samples,&job->reply,&control);}
   }
   voice_buffer_release(&record);if(lease)app_speech_capture_release();
   ESP_LOGI(TAG,"Job finished: error=%d free=%u largest=%u",error,(unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
@@ -146,9 +147,9 @@ bool app_game_voice_input(ai_game_target_t target,unsigned slot,app_gesture_t ge
  job=malloc(sizeof(*job));
  if(!job){portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);publish(GAME_VOICE_ERROR,ESP_ERR_NO_MEM,TXT_GAME_VOICE_REJECT);return true;}
  if(ai_session_begin(&session,target,esp_timer_get_time(),&job->game,&job_token)!=AI_FLOW_OK){free(job);job=NULL;portENTER_CRITICAL(&lock);occupied=false;portEXIT_CRITICAL(&lock);return true;}
- if(!(follow_pending&&follow_model_revision==config.generation&&follow_revision==r&&follow_configuration==c&&follow_activation==target.activation&&follow_module==target.module_id))followup[0]=0;
+ if(!(follow_pending&&follow_persona_revision==ai_persona_revision()&&follow_model_revision==config.generation&&follow_revision==r&&follow_configuration==c&&follow_activation==target.activation&&follow_module==target.module_id))followup[0]=0;
  snprintf(worker_input,sizeof(worker_input),"%s",followup);
- follow_pending=false;provider=config.active;config_revision=config.generation;active_target=target;
+ follow_pending=false;provider=config.active;config_revision=config.generation;persona_revision=ai_persona_revision();active_target=target;
  portENTER_CRITICAL(&lock);cancelled=false;send_requested=false;completed=false;occupied=true;queued=true;worker_deadline=session.deadline;view.milliseconds=0;portEXIT_CRITICAL(&lock);
  publish(GAME_VOICE_STARTING,0,TXT_GAME_VOICE_START);xTaskNotifyGive(worker);return true;
 }
@@ -156,7 +157,7 @@ bool app_game_voice_tick(ai_game_target_t target,int64_t now){
  static unsigned rendered;game_voice_snapshot_t s;app_game_voice_snapshot(&s);
  if(s.state!=GAME_VOICE_IDLE && (target.ops!=active_target.ops || target.context!=active_target.context || target.module_id!=active_target.module_id || target.activation!=active_target.activation))app_game_voice_cancel();
  if(session.pending){uint32_t r,c;ai_runtime_snapshot_t config;ai_config_runtime(&config);
-  if(target.ops!=active_target.ops||target.module_id!=active_target.module_id||target.activation!=active_target.activation||!target.ops||!target.ops->stamp(target.context,&r,&c)||r!=session.revision||c!=session.configuration||config.generation!=config_revision||now>=session.deadline)app_game_voice_cancel();
+  if(target.ops!=active_target.ops||target.module_id!=active_target.module_id||target.activation!=active_target.activation||!target.ops||!target.ops->stamp(target.context,&r,&c)||r!=session.revision||c!=session.configuration||config.generation!=config_revision||ai_persona_revision()!=persona_revision||now>=session.deadline)app_game_voice_cancel();
  }
  portENTER_CRITICAL(&lock);bool done=completed;completed=false;if(done)occupied=false;bool was_cancelled=cancelled;int error=view.error;portEXIT_CRITICAL(&lock);
  if(done){
@@ -175,7 +176,7 @@ bool app_game_voice_tick(ai_game_target_t target,int64_t now){
     else publish(GAME_VOICE_REPLY,0,TXT_GAME_VOICE_DONE);
    }else{
     publish(GAME_VOICE_REPLY,0,result.text);app_speech_say(result.text);
-    if(result.kind==AI_REPLY_CLARIFY){snprintf(followup,sizeof(followup),"Clarification previously asked: %s. The recording answers this question.",result.text);follow_pending=true;follow_model_revision=config_revision;follow_revision=session.revision;follow_configuration=session.configuration;follow_activation=target.activation;follow_module=target.module_id;}
+    if(result.kind==AI_REPLY_CLARIFY){snprintf(followup,sizeof(followup),"Clarification previously asked: %s. The recording answers this question.",result.text);follow_pending=true;follow_persona_revision=persona_revision;follow_model_revision=config_revision;follow_revision=session.revision;follow_configuration=session.configuration;follow_activation=target.activation;follow_module=target.module_id;}
    }
   }
   free(job);job=NULL;
