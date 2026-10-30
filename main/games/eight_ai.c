@@ -14,7 +14,10 @@ static const char instructions[]=
     "Call get_score for current score questions. Copy revision exactly. Never start/reset a match or change rules. "
     "One tool per response; do not split larger changes into repeated calls. Reject unsupported actions or clarify. "
     "An operation is only a proposal until the device reports success; do not claim it executed. "
-    "Ordinary questions may be answered with text; text never changes the game. Reply in the user's language.";
+    "Ordinary questions may be answered with text; text never changes the game. Reply in the user's language. "
+    "This is a tiny voice device: answer in one short sentence, at most 30 Chinese characters or 20 words. "
+    "Clarifications must be one concise question, at most 20 Chinese characters or 15 words. "
+    "No greetings, repetition, lists, Markdown or explanations of tool usage.";
 static const char tools[]=
     "[{\"name\":\"adjust_score\",\"description\":\"Add or subtract one rack win for an explicit player\","
     "\"parameters\":{\"type\":\"object\",\"properties\":{\"player_id\":{\"type\":\"string\",\"enum\":[\"p1\",\"p2\"]},"

@@ -199,6 +199,9 @@ int main(void) {
         app_container_input(&app,2,APP_GESTURE_SHORT);app_container_input(&app,1,APP_GESTURE_SHORT);
         app_ui_render(&app,91,"");capture(r ? "voice-ready-90" : "voice-ready-270");
         app_container_input(&app,1,APP_GESTURE_SHORT);assert(speech_preview.state==SPEECH_WAITING);
+        app_ui_render(&app,91,"");capture(r ? "voice-stop-90" : "voice-stop-270");
+        app_container_input(&app,1,APP_GESTURE_SHORT);assert(speech_preview.state==SPEECH_IDLE&&!speech_preview.pending);
+        app_container_input(&app,1,APP_GESTURE_SHORT);assert(speech_preview.state==SPEECH_WAITING);
         app_container_input(&app,1,APP_GESTURE_LONG);app_ui_render(&app,91,"");
         assert(speech_preview.state==SPEECH_IDLE);app_container_input(&app,1,APP_GESTURE_LONG);assert(app.page==APP_PAGE_HOME);
     }

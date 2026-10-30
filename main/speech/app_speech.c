@@ -19,7 +19,7 @@ extern const unsigned char voice_data[] asm("_binary_esp_tts_voice_data_xiaoxin_
 static bool cancelled(unsigned epoch){portENTER_CRITICAL(&lock);bool yes=epoch!=cancel_epoch;portEXIT_CRITICAL(&lock);return yes;}
 static esp_err_t speak(const char *text,unsigned epoch){
     // The vendor's prebuilt routines assume their small allocations succeed.
-    // Leave headroom for AMR decoding, stretching, codec DMA and networking.
+    // Leave headroom for AMR decoding, codec DMA and networking.
     if(esp_get_free_heap_size()<70000 || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)<40000)return ESP_ERR_NO_MEM;
     esp_err_t error=bsp_audio_init();
     if(error==ESP_OK)error=bsp_audio_wake();
@@ -30,12 +30,17 @@ static esp_err_t speak(const char *text,unsigned epoch){
     esp_tts_handle_t tts=voice ? esp_tts_create(voice) : NULL;
     if(!tts)error=ESP_ERR_NO_MEM;
     else if(!cancelled(epoch)){
-        if(!esp_tts_parse_chinese(tts,text))error=ESP_ERR_INVALID_ARG;
-        else{
-            unsigned samples=0;
-            const int64_t deadline=esp_timer_get_time()+30000000;
+        unsigned samples=0;size_t offset=0;
+        const int64_t deadline=esp_timer_get_time()+30000000;
+        while(text[offset]&&!cancelled(epoch)&&error==ESP_OK){
+            char phrase[SPEECH_SEGMENT_CAPACITY];
+            size_t size=speech_model_segment(text+offset,phrase);offset+=size;
+            if(!size||esp_timer_get_time()>deadline){error=ESP_FAIL;break;}
+            if(!esp_tts_parse_chinese(tts,phrase)){error=ESP_ERR_INVALID_ARG;break;}
             while(!cancelled(epoch)){
-                int count=0;short *pcm=esp_tts_stream_play(tts,&count,3);
+                // Speed zero streams original voice samples, bypassing the
+                // vendor's CPU-heavy stretcher (observed task-watchdog PC).
+                int count=0;short *pcm=esp_tts_stream_play(tts,&count,0);
                 if(count==0)break;
                 if(!pcm || count<0 || count>16000 || esp_timer_get_time()>deadline){error=ESP_FAIL;break;}
                 for(int at=0;at<count && !cancelled(epoch);){
@@ -47,11 +52,13 @@ static esp_err_t speak(const char *text,unsigned epoch){
                 if(error!=ESP_OK)break;
                 vTaskDelay(1);
             }
-            ESP_LOGI(TAG,"Synthesis finished: samples=%u free=%u largest=%u stack=%u",samples,
-                (unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
-                (unsigned)uxTaskGetStackHighWaterMark(NULL));
-            if(!samples && !cancelled(epoch) && error==ESP_OK)error=ESP_FAIL;
+            esp_tts_stream_reset(tts);
+            vTaskDelay(1);
         }
+        ESP_LOGI(TAG,"Synthesis finished: samples=%u free=%u largest=%u stack=%u",samples,
+            (unsigned)esp_get_free_heap_size(),(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+            (unsigned)uxTaskGetStackHighWaterMark(NULL));
+        if(!samples && !cancelled(epoch) && error==ESP_OK)error=ESP_FAIL;
     }
     if(tts){esp_tts_stream_reset(tts);esp_tts_destroy(tts);}
     if(voice)esp_tts_voice_set_free(voice);

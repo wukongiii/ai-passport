@@ -1155,3 +1155,44 @@ still require acceptance of this revision.
 Complete gate Build/Host tests PASS, focused ASan/UBSan PASS. Verified image
 SHA-256: `39e0d6c34dbd956b5b6c1893a9d397da7c7146238fbe4af78da19986c975002e`;
 matching ELF: `ec3265ba2a9e099c2f2ef2cec6201388d2f4af2d69085b891fcec0c48f7d5e1d`.
+
+
+### Concise feedback and interruptible native-speed playback
+
+The block-buffer firmware's later device retest completed both a long and a short
+request (35440/12000 ADPCM bytes), including spoken feedback, confirmed by the
+user. Post-request free heap returned to 79648/79640 bytes with a largest block
+of 61440 bytes. Earlier reported HTTP errors 28674/-1 were not captured and did
+not reproduce in that retest; these observations do not prove long-term network
+reliability. The long reply triggered an IDLE task-watchdog warning while the
+speech task was in the vendor stretcher; playback eventually completed.
+
+Eight-ball instructions now request one short reply (30 Chinese characters or
+20 words), and one concise clarification (20 characters or 15 words), without
+lists, greetings or repeated explanations. Executed score operations continue
+using the local authoritative score message. These are model instructions,
+not guaranteed response bounds. The speech mailbox accepts up to 384 UTF-8
+bytes, matching the AI text contract; overlong input is rejected, never silently
+truncated. Playback splits valid text at punctuation or 12 codepoints without
+splitting UTF-8, streams each phrase and yields between chunks/phrases. It uses
+vendor speed 0, which bypasses the stretcher in the pinned library, rather than
+speed 3. The 30-second playback deadline and cancellation epoch remain active.
+
+While speech is playing or pending on the game board, middle short press is
+registered as Stop with the existing cancellation color. It cancels active and
+pending speech without opening settings or changing scores; middle long return
+and double-click recording retain their functions. The normal settings hint
+returns when playback stops. The local listening page also toggles its middle
+key between Play and Stop, retaining the existing right Stop key. Cancellation
+is serviced at PCM boundaries; real response latency and native-speed quality
+require device listening checks. Host tests cover UTF-8/punctuation boundaries,
+complete phrase order, native-speed selection, interruption between phrases,
+pending cancellation and dynamic gameplay bindings.
+
+Complete gate Build/Host tests PASS, ASan/UBSan speech checks PASS, and bounded
+90/270-degree LVGL previews PASS (24792-byte pool peak). On-device native-speed
+quality, middle-key stop latency and absence of watchdog warnings await acceptance.
+
+`build/firmware/ce6881d7a267f344326ff507a14a809e233a350c9122817b077d26184eb9674c/`
+
+ELF SHA-256: `416499b76b441b37fd8b2f4bca87585131d00e8b89092de043ca564608087ca5`.

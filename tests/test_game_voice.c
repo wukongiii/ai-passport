@@ -59,7 +59,10 @@ bool ai_config_connection(unsigned p,char *key,char *model,char *url,unsigned *g
 bool ai_check_take(unsigned *p,unsigned *g){(void)p;(void)g;return false;}
 void ai_probe_run(unsigned p,unsigned g){(void)p;(void)g;}
 void app_network_snapshot(app_network_snapshot_t *s){*s=net;}
-void app_speech_stop(void){}
+static app_speech_snapshot_t speech_view;
+static unsigned stopped_speech;
+void app_speech_stop(void){++stopped_speech;speech_view=(app_speech_snapshot_t){0};}
+void app_speech_snapshot(app_speech_snapshot_t *out){*out=speech_view;}
 bool app_speech_capture_acquire(void){assert(!lease_owned);lease_owned=true;return true;}
 void app_speech_capture_release(void){assert(lease_owned);lease_owned=false;}
 bool app_speech_say(const char *s){assert(*s&&!lease_owned);++spoken;return true;}
@@ -119,6 +122,12 @@ int main(void){
  codec_tests();assert(app_game_voice_start());
  assert(!app_game_voice_input(target,1,APP_GESTURE_SHORT));assert(!app_game_voice_input(target,1,APP_GESTURE_LONG));
  app_bindings_t b={0};app_game_voice_bindings(target,&b);assert(b.actions[APP_GESTURE_DOUBLE][1].id);
+ speech_view.state=SPEECH_PLAYING;app_game_voice_bindings(target,&b);
+ assert(b.actions[APP_GESTURE_SHORT][1].id==64003&&b.actions[APP_GESTURE_SHORT][1].role==APP_ACTION_CANCEL);
+ assert(app_game_voice_tick(target,now));unsigned stops=stopped_speech;
+ assert(app_game_voice_input(target,1,APP_GESTURE_SHORT)&&stopped_speech==stops+1);
+ assert(app_game_voice_tick(target,now));assert(!app_game_voice_input(target,1,APP_GESTURE_SHORT));
+ speech_view.pending=true;assert(app_game_voice_input(target,1,APP_GESTURE_SHORT)&&!speech_view.pending);
  cfg.configured[0]=false;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE));assert(view.state==GAME_VOICE_ERROR&&!occupied);cfg.configured[0]=true;
  net.state=APP_NET_OFFLINE;assert(app_game_voice_input(target,1,APP_GESTURE_DOUBLE)&&!occupied);net.state=APP_NET_CONNECTED;
  begin_job();b.actions[APP_GESTURE_LONG][1]=(app_action_hint_t){"hall",true,1,APP_ACTION_BACK};app_game_voice_bindings(target,&b);assert(b.actions[APP_GESTURE_LONG][1].id==64002);process_job();assert(completed&&occupied);unsigned seq=session.sequence;

@@ -101,6 +101,7 @@ void app_game_voice_cancel(void){
  portENTER_CRITICAL(&lock);bool already=cancelled;cancelled=true;bool busy=occupied;view.state=busy?GAME_VOICE_CANCELLING:GAME_VOICE_IDLE;view.text[0]=0;if(!already || !busy)++view.revision;portEXIT_CRITICAL(&lock);
 }
 static bool busy_state(game_voice_state_t s){return s==GAME_VOICE_STARTING||s==GAME_VOICE_RECORDING||s==GAME_VOICE_WAITING||s==GAME_VOICE_CANCELLING;}
+static bool speech_active(void){app_speech_snapshot_t s;app_speech_snapshot(&s);return s.pending||s.state==SPEECH_WAITING||s.state==SPEECH_PLAYING||s.state==SPEECH_STOPPING;}
 void app_game_voice_bindings(ai_game_target_t target,app_bindings_t *b){
  if(!target.ops)return;
  uint32_t r,c;if(!target.ops->stamp(target.context,&r,&c))return;
@@ -110,10 +111,16 @@ void app_game_voice_bindings(ai_game_target_t target,app_bindings_t *b){
   b->actions[APP_GESTURE_SHORT][1]=(app_action_hint_t){0};b->actions[APP_GESTURE_DOUBLE][1]=(app_action_hint_t){0};
   if(s.state==GAME_VOICE_RECORDING)app_actions_register(b,1,APP_GESTURE_SHORT,64001,TXT_GAME_VOICE_SEND,true,APP_ACTION_CONFIRM);
   app_actions_register(b,1,APP_GESTURE_LONG,64002,TXT_GAME_VOICE_CANCEL,true,APP_ACTION_CANCEL);
- }else app_actions_register(b,1,APP_GESTURE_DOUBLE,64000,TXT_GAME_VOICE,true,APP_ACTION_NAVIGATE);
+ }else{
+  app_actions_register(b,1,APP_GESTURE_DOUBLE,64000,TXT_GAME_VOICE,true,APP_ACTION_NAVIGATE);
+  if(speech_active())app_actions_register(b,1,APP_GESTURE_SHORT,64003,TXT_VOICE_STOP,true,APP_ACTION_CANCEL);
+ }
 }
 bool app_game_voice_input(ai_game_target_t target,unsigned slot,app_gesture_t gesture){
  game_voice_snapshot_t s;app_game_voice_snapshot(&s);
+ if(!busy_state(s.state)&&slot==1&&gesture==APP_GESTURE_SHORT&&target.ops&&speech_active()){
+  uint32_t r,c;if(target.ops->stamp(target.context,&r,&c)){app_speech_stop();return true;}
+ }
  if(busy_state(s.state)){
   if(slot!=1){app_game_voice_cancel();return false;}
   if(gesture==APP_GESTURE_LONG)app_game_voice_cancel();
@@ -167,5 +174,6 @@ bool app_game_voice_tick(ai_game_target_t target,int64_t now){
   }
   free(job);job=NULL;
  }
- app_game_voice_snapshot(&s);bool changed=rendered!=s.revision;rendered=s.revision;return changed;
+ app_game_voice_snapshot(&s);static bool rendered_speech;bool speaking=speech_active();
+ bool changed=rendered!=s.revision||rendered_speech!=speaking;rendered=s.revision;rendered_speech=speaking;return changed;
 }

@@ -15,5 +15,13 @@ int main(void){
  char long_text[SPEECH_TEXT_CAPACITY+1];memset(long_text,'x',sizeof(long_text));long_text[sizeof(long_text)-1]=0;
  assert(!speech_model_submit(&m,long_text,4000));long_text[SPEECH_TEXT_CAPACITY-1]=0;assert(speech_model_submit(&m,long_text,4000));
  speech_model_cancel(&m);assert(!speech_model_take(&m,9000,out));
+ const char *text="先报比分，接着完整播放第二个较长句子直到结尾。😀";
+ char joined[SPEECH_TEXT_CAPACITY]={0},phrase[SPEECH_SEGMENT_CAPACITY];size_t offset=0;
+ assert(speech_model_segment(text,phrase)==strlen("先报比分，")&&!strcmp(phrase,"先报比分，"));
+ while(text[offset]){size_t n=speech_model_segment(text+offset,phrase);assert(n&&n<sizeof(phrase));strcat(joined,phrase);offset+=n;}
+ assert(!strcmp(joined,text));assert(!speech_model_segment("",phrase));
+ assert(speech_model_segment("abcdefghijklmnop",phrase)==12&&!strcmp(phrase,"abcdefghijkl"));
+ assert(speech_model_submit(&m,text,9000));
+
  puts("Speech merge deadline, latest-only replacement, UTF-8 bounds and cancellation: PASS");
 }

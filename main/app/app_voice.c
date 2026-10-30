@@ -43,7 +43,8 @@ static void bindings(void *c,app_bindings_t *b){
     app_actions_register(b,1,APP_GESTURE_LONG,503,TXT_APP_BACK,true,APP_ACTION_BACK);
     if(state.page==LISTEN){
         app_actions_register(b,0,APP_GESTURE_SHORT,504,TXT_VOICE_CHANGE,true,APP_ACTION_NAVIGATE);
-        app_actions_register(b,1,APP_GESTURE_SHORT,505,TXT_VOICE_PLAY,true,APP_ACTION_CONFIRM);
+        bool playing=state.speech.pending||state.speech.state==SPEECH_PLAYING||state.speech.state==SPEECH_STOPPING;
+        app_actions_register(b,1,APP_GESTURE_SHORT,505,playing?TXT_VOICE_STOP:TXT_VOICE_PLAY,true,playing?APP_ACTION_CANCEL:APP_ACTION_CONFIRM);
         app_actions_register(b,2,APP_GESTURE_SHORT,506,TXT_VOICE_STOP,true,APP_ACTION_CANCEL);
     }else if(state.page==PROVIDER){
         app_actions_register(b,0,APP_GESTURE_SHORT,508,TXT_AI_PHONE,true,APP_ACTION_NAVIGATE);
@@ -93,7 +94,11 @@ static app_module_effect_t input(void *c,app_rotation_t r,unsigned slot,app_gest
             break;
         case LISTEN:
             if(slot==0)state.selected=(state.selected+1)%3;
-            else if(slot==1)state.rejected=!app_speech_say(phrases[state.selected]);
+            else if(slot==1){
+                app_speech_snapshot_t speech;app_speech_snapshot(&speech);
+                if(speech.pending||speech.state==SPEECH_PLAYING||speech.state==SPEECH_STOPPING)app_speech_stop();
+                else state.rejected=!app_speech_say(phrases[state.selected]);
+            }
             else app_speech_stop();
             break;
         }

@@ -30,3 +30,15 @@ bool speech_model_take(speech_model_t *m,uint64_t now,char out[SPEECH_TEXT_CAPAC
     memcpy(out,m->text,sizeof(m->text));speech_model_cancel(m);return true;
 }
 void speech_model_cancel(speech_model_t *m){memset(m,0,sizeof(*m));}
+size_t speech_model_segment(const char *text,char out[SPEECH_SEGMENT_CAPACITY]){
+    size_t used=0;
+    for(unsigned chars=0;text[used]&&chars<SPEECH_SEGMENT_CHARS;++chars){
+        unsigned char c=(unsigned char)text[used];
+        size_t n=c<128?1:c<0xe0?2:c<0xf0?3:4;
+        bool end=(n==1&&strchr(",.!?;:",c)) ||
+            (n==3&&(!memcmp(text+used,"，",3)||!memcmp(text+used,"。",3)||
+                    !memcmp(text+used,"？",3)||!memcmp(text+used,"！",3)||!memcmp(text+used,"；",3)));
+        memcpy(out+used,text+used,n);used+=n;if(end)break;
+    }
+    out[used]=0;return used;
+}
