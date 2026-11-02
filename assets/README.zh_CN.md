@@ -133,3 +133,16 @@ SHA-256：`24e5b93fbd0171868ccc21cf0b560188add9ef8541f13034ecac12a9a18e6a0f`。
 黑八、琥珀色 07:06 比分与麦克风符号，突出按键记分和语音控分。原创 AI
 宣传插画，图中已标明；并非设备截图。未使用第三方参考图片，未附单独许可。
 仅用于发布，不嵌入固件。发布助手图片／固件校验通过，尚待确认发布。
+
+### 台球演示视频
+
+[`videos/doubao-billiards-demo.mp4`](videos/doubao-billiards-demo.mp4) 为创作者于
+2026-11-02 提供用于发布的实机演示，展示大厅切换、按键记分与语音操作。
+视频长 79.52 秒，720 × 1280，使用 H.264 视频和 AAC 音频，大小 10301561 字节；
+中英文[作品介绍](../docs/assets/billiards-description.zh_CN.md)包含观看链接。
+仅用于发布，不嵌入固件；未附单独许可。
+
+MP4 由提供的 MOV 经 FFmpeg 转码，使用 `libx264`、
+`-preset medium -crf 24 -pix_fmt yuv420p`、96 kbit/s AAC、
+`-map_metadata -1` 与 `-movflags +faststart`。原视频保留于仓库外，
+MP4 全文件解码检查通过。

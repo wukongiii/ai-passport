@@ -148,3 +148,17 @@ scoring and voice control. Original AI-generated promotional illustration, marke
 as such; not a device screenshot. No third-party reference image or separate
 license was supplied. Publication asset only, not embedded in firmware.
 Publisher image/firmware validation passed; publication approval is pending.
+
+### Billiards demo video
+
+[`videos/doubao-billiards-demo.mp4`](videos/doubao-billiards-demo.mp4) is the
+creator-supplied device demonstration, provided for publication on 2026-11-02.
+It shows launcher navigation, button scoring, and voice control. The 79.52-second
+720 × 1280 recording uses H.264 video and AAC audio, occupies 10301561 bytes,
+and is linked from the bilingual [app description](../docs/assets/billiards-description.md).
+It is publication material, not embedded in firmware. No separate license was supplied.
+
+The MP4 was transcoded from the supplied MOV with FFmpeg using `libx264`,
+`-preset medium -crf 24 -pix_fmt yuv420p`, AAC at 96 kbit/s,
+`-map_metadata -1`, and `-movflags +faststart`. The original remains outside
+the repository. Full-file decoding of the MP4 passed.
