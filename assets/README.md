@@ -136,3 +136,15 @@ API test. It contains no personal recording. The 8 kHz mono IMA ADPCM payload ha
 standard 16-bit PCM WAV only during the isolated capability check. It is embedded
 in application rodata; no microphone capture or game change occurs in this check.
 SHA-256: `24e5b93fbd0171868ccc21cf0b560188add9ef8541f13034ecac12a9a18e6a0f`.
+
+### Billiards publishing cover
+
+[`images/publishing/doubao-billiards-cover-v1.png`](images/publishing/doubao-billiards-cover-v1.png)
+is a 1086 × 1448 PNG (exact portrait 3:4), generated with the built-in image
+service on 2026-11-02 for the Doubāo Billiards Scorekeeper community submission.
+Creative brief: forest-green pool-table poster, ivory Chinese product title,
+black eight ball, amber 07:06 score and microphone symbol; emphasize button
+scoring and voice control. Original AI-generated promotional illustration, marked
+as such; not a device screenshot. No third-party reference image or separate
+license was supplied. Publication asset only, not embedded in firmware.
+Publisher image/firmware validation passed; publication approval is pending.

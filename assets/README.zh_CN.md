@@ -124,3 +124,12 @@ python3 tools/generate_network_font.py --font build/font-tools/NotoSansCJKsc-Reg
 15707 个采样（7854 字节），初始预测值和索引为零。仅在独立能力检测时解码为标准
 16 位 PCM WAV。嵌入应用只读段；此检测不采集麦克风，也不修改球局。
 SHA-256：`24e5b93fbd0171868ccc21cf0b560188add9ef8541f13034ecac12a9a18e6a0f`。
+
+### 台球发布封面
+
+[`images/publishing/doubao-billiards-cover-v1.png`](images/publishing/doubao-billiards-cover-v1.png)
+为 1086 × 1448 PNG（精确竖版 3:4），于 2026-11-02 使用内置图像生成服务
+为逗宝台球记分器社区投稿制作。设计提示：深绿色台球桌海报、米白中文标题、
+黑八、琥珀色 07:06 比分与麦克风符号，突出按键记分和语音控分。原创 AI
+宣传插画，图中已标明；并非设备截图。未使用第三方参考图片，未附单独许可。
+仅用于发布，不嵌入固件。发布助手图片／固件校验通过，尚待确认发布。
