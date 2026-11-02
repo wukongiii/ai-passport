@@ -26,6 +26,8 @@ idf_component_register(
          "app/app_container.c"
          "app/app_registry.c"
          "app/app_ui.c"
+         "app/app_splash.c"
+         "../assets/fonts/startup_font_24.c"
          "input/text_input.c"
          "input/text_input_ui.c"
          "app/app_preferences.c"

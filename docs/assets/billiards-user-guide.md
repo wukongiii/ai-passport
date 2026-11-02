@@ -4,6 +4,8 @@
 
 ## Start a match
 
+On startup, the eight-ball logo and product name appear for about two seconds in the saved landscape direction, then the launcher opens automatically.
+
 Browse with left/right; press middle to open Chinese eight-ball. Chase and Snooker are UI previews. Manual scoring and local speech work offline; AI requires Wi-Fi and a model.
 
 | Scoreboard | Left | Middle | Right |

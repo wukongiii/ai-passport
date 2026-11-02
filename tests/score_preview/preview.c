@@ -7,6 +7,7 @@
 #include "ui/app_shell.h"
 #include "ui/app_header.h"
 #include "app/app_ui.h"
+#include "app/app_splash.h"
 #include "input/text_input.h"
 #include "app/app_settings.h"
 #include "app/app_input_lab.h"
@@ -114,6 +115,22 @@ int main(void) {
     static uint16_t draw[320*40];
     lv_display_set_buffers(d,draw,NULL,sizeof(draw),LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(d,flush);
+    lv_display_set_rotation(d,LV_DISPLAY_ROTATION_270);
+    lv_obj_t *initial = lv_screen_active();
+    lv_obj_t *splash = app_splash_create();
+    assert(splash);
+    lv_screen_load(splash);
+    advance(40);capture("startup-270");
+    assert(lv_obj_get_scroll_y(splash) == 0);
+    unsigned char *splash_frame = malloc(sizeof(frame));assert(splash_frame);
+    memcpy(splash_frame,frame,sizeof(frame));
+    advance(APP_SPLASH_DURATION_MS);capture("startup-still");
+    assert(!memcmp(splash_frame,frame,sizeof(frame)));
+    lv_display_set_rotation(d,LV_DISPLAY_ROTATION_90);
+    capture("startup-90");
+    assert(!memcmp(splash_frame,frame,sizeof(frame)));
+    free(splash_frame);
+    lv_screen_load(initial);lv_obj_delete(splash);
     lv_display_set_rotation(d,LV_DISPLAY_ROTATION_270);
     extern const lv_font_t score_font_16;
     app_shell_t game_shell; app_shell_create(&game_shell, &score_font_16);

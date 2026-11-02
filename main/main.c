@@ -6,6 +6,7 @@
 #include "key_guard.h"
 #include "app/app_container.h"
 #include "app/app_ui.h"
+#include "app/app_splash.h"
 #include "score/score_input.h"
 #include "app/app_settings.h"
 #include "network/app_network.h"
@@ -15,7 +16,6 @@
 #include "score/score_strings.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_sleep.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -26,6 +26,7 @@ static const char *TAG = "scorekeeper";
 static QueueHandle_t s_input_queue;
 static volatile bool s_input_ready;
 static volatile bool s_input_overflow;
+static bool s_input_started;
 static key_guard_t s_key_guard;
 static app_container_t s_app;
 
@@ -33,8 +34,14 @@ typedef struct { bsp_btn_t button; bsp_btn_ev_t event; } input_event_t;
 
 static void on_key(bsp_btn_t button, bsp_btn_ev_t event, void *user) {
     (void)user;
-    if (key_guard_consume(&s_key_guard, event == BSP_BTN_RELEASE, esp_timer_get_time())) return;
+    if (key_guard_consume(&s_key_guard, event == BSP_BTN_RELEASE, esp_timer_get_time())) {
+        s_input_started = false;
+        return;
+    }
     if (!s_input_ready || !s_input_queue) return;
+    // Ignore delayed startup-release clicks until the first accepted new press.
+    if (event == BSP_BTN_PRESS) s_input_started = true;
+    if (!s_input_started) return;
     // Queue double clicks as distinct gestures, never opening and accepting a dialog
     // from one rapid physical gesture. Each gesture has an explicit binding.
     if (event != BSP_BTN_PRESS && event != BSP_BTN_CLICK && event != BSP_BTN_DOUBLE &&
@@ -54,25 +61,53 @@ void app_main(void) {
     if (!display || !bsp_lvgl_lock(1000)) return;
     lv_display_set_rotation(display, s_app.rotation == APP_ROTATION_90 ?
                             LV_DISPLAY_ROTATION_90 : LV_DISPLAY_ROTATION_270);
-    const bool ui_ready = app_ui_create();
+    lv_obj_t *splash = app_splash_create();
+    if (splash) {
+        lv_screen_load(splash);
+        lv_refr_now(display);
+    }
     bsp_lvgl_unlock();
-    if (!ui_ready) {
-        ESP_LOGE(TAG, "UI font coverage check failed");
+    if (!splash) {
+        ESP_LOGE(TAG, "Startup font coverage check failed");
         return;
     }
     bsp_display_backlight(app_settings_preferences()->brightness);
+    const int64_t splash_until = esp_timer_get_time() + APP_SPLASH_DURATION_MS * 1000LL;
     const bool battery_ready = bsp_battery_init() == ESP_OK;
     // Start silent; only the speech worker owns audio after this initialization.
     if (bsp_audio_init() == ESP_OK && bsp_audio_release() != ESP_OK)
         ESP_LOGW(TAG, "Codec suspend failed; power draw remains unverified");
     if(!app_speech_start())ESP_LOGW(TAG,"Speech worker unavailable");
+    int battery = battery_ready ? bsp_battery_soc() : -1;
+    int millivolts = battery_ready ? bsp_battery_mv() : -1;
+    app_settings_device_info(battery,millivolts,esp_app_get_description()->version);
+    app_network_publish_preferences(app_settings_preferences());
+    app_network_init();
+    if(!app_game_voice_start())ESP_LOGW(TAG,"Game voice worker unavailable");
+    // LVGL keeps refreshing in its own task; overlap the splash with startup work.
+    while (esp_timer_get_time() < splash_until) vTaskDelay(pdMS_TO_TICKS(20));
+    while (!bsp_lvgl_lock(500)) vTaskDelay(pdMS_TO_TICKS(20));
+    // Drop the temporary tree before mounting the much larger launcher tree.
+    lv_obj_t *blank = lv_obj_create(NULL);
+    lv_screen_load(blank);
+    lv_obj_delete(splash);
+    const bool ui_ready = app_ui_create();
+    if (ui_ready) {
+        lv_obj_delete(blank);
+        app_ui_render(&s_app, battery, "");
+    }
+    bsp_lvgl_unlock();
+    if (!ui_ready) {
+        ESP_LOGE(TAG, "UI font coverage check failed");
+        return;
+    }
     s_input_queue = xQueueCreate(16, sizeof(input_event_t));
     if (!s_input_queue) {
         ESP_LOGE(TAG, "Input queue allocation failed");
         return;
     }
-    if (esp_sleep_get_wakeup_causes() & (1u << ESP_SLEEP_WAKEUP_GPIO))
-        key_guard_arm(&s_key_guard, esp_timer_get_time(), 10000000);
+    // Suppress a key held across power-on as well as one used to wake the device.
+    key_guard_arm(&s_key_guard, esp_timer_get_time(), 10000000);
     if (bsp_button_init(on_key, NULL) != ESP_OK) {
         ESP_LOGE(TAG, "Button initialization failed");
         vQueueDelete(s_input_queue);
@@ -83,12 +118,6 @@ void app_main(void) {
     ESP_ERROR_CHECK(bsp_button_set_double_click_ms(applied_double));
     key_guard_sync_released(&s_key_guard, bsp_button_read_mv() >= BSP_BTN_MV_RELEASED_MIN);
     s_input_ready = true;
-    int battery = battery_ready ? bsp_battery_soc() : -1;
-    int millivolts = battery_ready ? bsp_battery_mv() : -1;
-    app_settings_device_info(battery,millivolts,esp_app_get_description()->version);
-    app_network_publish_preferences(app_settings_preferences());
-    app_network_init();
-    if(!app_game_voice_start())ESP_LOGW(TAG,"Game voice worker unavailable");
     int64_t last_battery = esp_timer_get_time();
     int64_t last_input = last_battery;
     bool blanked = false;
@@ -96,10 +125,6 @@ void app_main(void) {
     app_net_state_t last_network_state=APP_NET_OFFLINE;
     unsigned network_revision=0;
     uint8_t brightness = app_settings_preferences()->brightness;
-    if (bsp_lvgl_lock(500)) {
-        app_ui_render(&s_app, battery, "");
-        bsp_lvgl_unlock();
-    }
     ESP_LOGI(TAG, "Ready, free heap=%u largest=%u", (unsigned)esp_get_free_heap_size(),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     for (;;) {

@@ -84,6 +84,15 @@ cover arbitrary player names. Physical Chinese rendering remains device acceptan
 
 ### Launcher illustrations
 
+The startup logo in `main/app/app_splash.c` draws original LVGL shapes without a
+bitmap or animation buffer. `fonts/startup_font_24.c` contains only the seven
+Chinese title characters at 24 px / 4 bpp, using the pinned Noto CJK source and
+OFL license above. Regenerate with:
+
+```bash
+python3 tools/generate_startup_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
+```
+
 `images/launcher/{eight,chase,snooker,settings,voice}.png` are original geometric
 illustrations authored for this application; they follow the repository license.
 `images/launcher/launcher_art.c` embeds the same five 176 x 96 images as RGB565

@@ -12,6 +12,15 @@ spec.loader.exec_module(generator)
 
 
 class FontTest(unittest.TestCase):
+    def test_startup_wordmark(self):
+        title = re.search(r'#define APP_SPLASH_TITLE "([^"]+)"',
+                          (ROOT / "main/app/app_splash.h").read_text()).group(1)
+        font = (ROOT / "assets/fonts/startup_font_24.c").read_text()
+        actual = {int(cp, 16) for cp in re.findall(r'/\* U\+([0-9A-F]+) ', font)}
+        self.assertEqual(set(map(ord, title)), actual)
+        self.assertIn(".bitmap_format = 0", font)
+        self.assertIn(".bpp = 4", font)
+
     def test_required_glyphs_and_generated_inventory(self):
         expected = set(generator.codepoints())
         for size in (14, 16):

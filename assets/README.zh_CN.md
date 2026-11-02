@@ -79,6 +79,14 @@ python3 tools/generate_score_font.py --font build/font-tools/NotoSansCJKsc-Regul
 
 ### 大厅插画
 
+`main/app/app_splash.c` 中的启动标识由原创 LVGL 图形绘制，无位图或动画缓冲。
+`fonts/startup_font_24.c` 只包含标题中的七个汉字，字号 24 像素、4 bpp，
+使用上面固定版本的 Noto CJK 源及 OFL 许可。重新生成：
+
+```bash
+python3 tools/generate_startup_font.py --font build/font-tools/NotoSansCJKsc-Regular.otf --converter build/font-tools/node_modules/.bin/lv_font_conv
+```
+
 `images/launcher/{eight,chase,snooker,settings,voice}.png` 是为本应用创作的原创几何
 插画，遵循仓库许可证。`images/launcher/launcher_art.c` 将相同五张 176 x 96 图片
 嵌入为 RGB565 常量，像素共 168960 字节，无需整图解压。使用 Pillow 13.0.0 与
