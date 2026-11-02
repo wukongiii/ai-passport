@@ -134,6 +134,17 @@ SHA-256：`24e5b93fbd0171868ccc21cf0b560188add9ef8541f13034ecac12a9a18e6a0f`。
 宣传插画，图中已标明；并非设备截图。未使用第三方参考图片，未附单独许可。
 仅用于发布，不嵌入固件。发布助手图片／固件校验通过，尚待确认发布。
 
+### 台球附图预览
+
+四张 `images/publishing/doubao-billiards-gallery-*.png` 是 960 × 1280、竖版 3:4
+发布附图，原始 320 × 240 模拟器渲染保留于 `images/publishing/previews/`。
+创作者选定了自定义名字记分、语音录音、多模型选择、设置分组四个画面。
+渲染使用示例数据，不是实机截图；每张附图均有中英文标注。
+
+附图由本地 Pillow 排版，使用已记录的 Noto CJK 字体，对界面等比最近邻放大，
+配以深色背景和说明标题。未使用 AI 生图或第三方参考图片。
+本仓库创作的排版遵循仓库许可证，不嵌入固件。
+
 ### 台球演示视频
 
 [`videos/doubao-billiards-demo.mp4`](videos/doubao-billiards-demo.mp4) 为创作者于

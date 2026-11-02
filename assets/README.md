@@ -149,6 +149,21 @@ as such; not a device screenshot. No third-party reference image or separate
 license was supplied. Publication asset only, not embedded in firmware.
 Publisher image/firmware validation passed; publication approval is pending.
 
+### Billiards gallery previews
+
+The four `images/publishing/doubao-billiards-gallery-*.png` files are 960 × 1280
+portrait 3:4 publication panels. Their original 320 × 240 simulator renders are
+retained under `images/publishing/previews/`. The creator selected these four
+views: scoring with custom names, voice recording, model selection, and grouped
+settings. The renders contain sample data and are not device captures; each
+panel identifies this in Chinese and English.
+
+Panels were composed locally with Pillow using the documented Noto CJK font,
+an unchanged-aspect-ratio nearest-neighbor enlargement of the render, a dark
+background, and explanatory titles. No AI image generation or third-party
+reference image was used. These repository-authored layouts follow the
+repository license and are not embedded in firmware.
+
 ### Billiards demo video
 
 [`videos/doubao-billiards-demo.mp4`](videos/doubao-billiards-demo.mp4) is the
